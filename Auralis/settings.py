@@ -37,7 +37,13 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'CoreApps.users',
+    'CoreApps.sensorhub',
+    'CoreApps.measurements',  # Añade esta línea si no existe
 ]
+
+# Configuración del modelo de usuario personalizado
+AUTH_USER_MODEL = 'users.User'
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',

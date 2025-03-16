@@ -29,9 +29,8 @@ class Measurement(models.Model):
             models.Index(fields=['sensor', 'timestamp']),
             models.Index(fields=['timestamp']),
         ]
-        # Comentamos o eliminamos estas líneas temporalmente
-        # db_table = 'measurements_measurement'
-        # managed = False
+        db_table = 'measurements_measurement'
+        managed = False
 
     def save(self, *args, **kwargs):
         # Validar el rango si está definido

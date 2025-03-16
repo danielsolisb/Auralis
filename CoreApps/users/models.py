@@ -2,6 +2,7 @@ from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.db import models
 from django.core.validators import RegexValidator
 from django.utils.translation import gettext_lazy as _
+from django.core.exceptions import ValidationError  # Agregamos esta importación
 
 class CustomUserManager(BaseUserManager):
     def create_user(self, email, password=None, **extra_fields):
@@ -28,7 +29,8 @@ class User(AbstractUser):
         OPERATOR = 'OP', _('Operador')
         INSTALLER = 'IN', _('Instalador')
 
-    COMPANY_REQUIRED_TYPES = ['AD', 'CL', 'SV', 'OP']
+    # Modificamos esta lista para excluir CL (Cliente)
+    COMPANY_REQUIRED_TYPES = ['AD', 'SV', 'OP']
 
     username = None
     email = models.EmailField(_('email address'), unique=True)
@@ -77,6 +79,9 @@ class User(AbstractUser):
 
     def clean(self):
         super().clean()
+        # Saltamos la validación si es un registro web de cliente
+        if hasattr(self, '_skip_company_validation'):
+            return
         if self.user_type in self.COMPANY_REQUIRED_TYPES and not self.company:
             raise ValidationError({
                 'company': _('La empresa es obligatoria para este tipo de usuario')

@@ -1,0 +1,76 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load widget_tweaks %}
+
+{% block content %}
+<div class="login-container">
+    <div class="login-card">
+        <div class="logo-section">
+            <h1>Auralis</h1>
+            <p>Sistema de Monitoreo Ambiental</p>
+        </div>
+        <div class="form-section">
+            <h2>Registro de Cliente</h2>
+            <form method="post">
+                {% csrf_token %}
+                {% if form.non_field_errors %}
+                <div class="alert alert-danger">
+                    {{ form.non_field_errors }}
+                </div>
+                {% endif %}
+                
+                <div class="form-group">
+                    <label for="id_first_name">Nombre</label>
+                    {% render_field form.first_name placeholder="Ingrese su nombre" %}
+                    {{ form.first_name.errors }}
+                </div>
+                
+                <div class="form-group">
+                    <label for="id_last_name">Apellido</label>
+                    {% render_field form.last_name placeholder="Ingrese su apellido" %}
+                    {{ form.last_name.errors }}
+                </div>
+                
+                <div class="form-group">
+                    <label for="id_email">Correo Electrónico</label>
+                    {% render_field form.email placeholder="ejemplo@correo.com" %}
+                    {{ form.email.errors }}
+                </div>
+                
+                <div class="form-group">
+                    <label for="id_identification_type">Tipo de Identificación</label>
+                    {% render_field form.identification_type class="form-select" %}
+                    {{ form.identification_type.errors }}
+                </div>
+                
+                <div class="form-group">
+                    <label for="id_identification_number">Número de Identificación</label>
+                    {% render_field form.identification_number placeholder="Ingrese su número de identificación" %}
+                    <small class="form-text text-muted">Para cédula: Ingrese exactamente 10 dígitos numéricos</small>
+                    {{ form.identification_number.errors }}
+                </div>
+                
+                <div class="form-group">
+                    <label for="id_password1">Contraseña</label>
+                    {% render_field form.password1 placeholder="Ingrese su contraseña" %}
+                    {% if form.password1.help_text %}
+                    <small class="form-text text-muted">{{ form.password1.help_text }}</small>
+                    {% endif %}
+                    {{ form.password1.errors }}
+                </div>
+                
+                <div class="form-group">
+                    <label for="id_password2">Confirmar Contraseña</label>
+                    {% render_field form.password2 placeholder="Confirme su contraseña" %}
+                    {{ form.password2.errors }}
+                </div>
+                
+                <button type="submit" class="login-btn">Registrarse</button>
+            </form>
+            <div class="signup-link">
+                ¿Ya tienes una cuenta? <a href="{% url 'login' %}">Iniciar Sesión</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

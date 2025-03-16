@@ -1,0 +1,101 @@
+1. Primero, modificamos el modelo Measurement para que Django no maneje la tabla:
+```python
+class Meta:
+    verbose_name = _('medición')
+    verbose_name_plural = _('mediciones')
+    indexes = [
+        models.Index(fields=['sensor', 'timestamp']),
+        models.Index(fields=['timestamp']),
+    ]
+    db_table = 'measurements_measurement'
+    managed = False
+ ```
+```
+2. Eliminamos la tabla actual (como no hay datos, es seguro):
+```sql
+DROP TABLE IF EXISTS measurements_measurement;
+ ```
+```
+
+3. Creamos la tabla con el modelo Measurement:
+Eliminar la clave foránea y manejar la integridad referencial a nivel de aplicación:
+```sql
+CREATE TABLE measurements_measurement (
+    id BIGINT AUTO_INCREMENT,
+    sensor_id BIGINT NOT NULL,
+    timestamp DATETIME NOT NULL,
+    value FLOAT NOT NULL,
+    is_valid BOOLEAN NOT NULL DEFAULT TRUE,
+    PRIMARY KEY (id, timestamp),
+    KEY `idx_sensor_timestamp` (sensor_id, timestamp),
+    KEY `idx_timestamp` (timestamp)
+) ENGINE=InnoDB
+PARTITION BY RANGE (TO_DAYS(timestamp)) (
+    PARTITION p_week_2025_10 VALUES LESS THAN (TO_DAYS('2025-03-17')),
+    PARTITION p_week_2025_11 VALUES LESS THAN (TO_DAYS('2025-03-24')),
+    PARTITION p_week_2025_12 VALUES LESS THAN (TO_DAYS('2025-03-31')),
+    PARTITION p_week_2025_13 VALUES LESS THAN (TO_DAYS('2025-04-07')),
+    PARTITION p_future VALUES LESS THAN MAXVALUE
+);
+ ```
+```
+4. Creamos el procedimiento almacenado para automatizar la creación de particiones:
+```sql
+DELIMITER //
+
+CREATE PROCEDURE create_weekly_partition()
+BEGIN
+    DECLARE next_week DATE;
+    DECLARE partition_name VARCHAR(32);
+    
+    SET next_week = DATE_ADD(DATE_FORMAT(NOW(), '%Y-%m-%d'), INTERVAL 2 WEEK);
+    SET partition_name = CONCAT('p_week_', 
+        DATE_FORMAT(next_week, '%Y_%u')
+    );
+    
+    SET @sql = CONCAT(
+        'ALTER TABLE measurements_measurement ',
+        'REORGANIZE PARTITION p_future INTO (',
+        'PARTITION ', partition_name, 
+        ' VALUES LESS THAN (TO_DAYS(''',
+        DATE_FORMAT(DATE_ADD(next_week, INTERVAL 1 WEEK), '%Y-%m-%d'),
+        ''')), ',
+        'PARTITION p_future VALUES LESS THAN MAXVALUE)'
+    );
+    
+    PREPARE stmt FROM @sql;
+    EXECUTE stmt;
+    DEALLOCATE PREPARE stmt;
+END //
+
+DELIMITER ;
+ ```
+```
+
+5. Creamos el evento automático que ejecutará el procedimiento cada semana:
+```sql
+CREATE EVENT create_weekly_measurement_partition
+ON SCHEDULE EVERY 1 WEEK
+STARTS '2025-03-11 00:00:00'
+DO CALL create_weekly_partition();
+ ```
+```
+
+6. Activamos el event scheduler:
+```sql
+SET GLOBAL event_scheduler = ON;
+ ```
+
+
+verificar:
+
+-- Ver las particiones actuales
+SELECT PARTITION_NAME, TABLE_ROWS
+FROM INFORMATION_SCHEMA.PARTITIONS
+WHERE TABLE_NAME = 'measurements_measurement';
+
+-- Ver si el evento está creado
+SHOW EVENTS;
+
+-- Ver si el event scheduler está activo
+SHOW VARIABLES LIKE 'event_scheduler';

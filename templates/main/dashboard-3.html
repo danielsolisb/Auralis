@@ -1,0 +1,116 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Dashboard - Auralis{% endblock %}
+
+{% block page_styles %}
+<link rel="stylesheet" href="{% static 'css/dashboard.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="dashboard-wrapper">
+    <nav class="navbar">
+        <button class="mobile-menu-toggle" id="menuToggle">
+            <i class="fas fa-bars"></i>
+        </button>
+        <div class="navbar-brand">
+            <img src="{% static 'img/LOGO_AURALIS.png' %}" alt="Auralis Logo" class="mobile-logo">
+        </div>
+    </nav>
+
+    <div class="dashboard-container">
+        <div class="sidebar" id="sidebar">
+            <div class="logo desktop-only">
+                <img src="{% static 'img/LOGO_AURALIS.png' %}" alt="Auralis Logo">
+            </div>
+            <nav class="menu">
+                <a href="{% url 'dashboard-map' %}" class="menu-item">
+                    <i class="fas fa-map"></i>
+                    <span>Mapa</span>
+                </a>
+                <div class="menu-item-group">
+                    <div class="menu-item menu-item-parent" id="dataToggle">
+                        <i class="fas fa-database"></i>
+                        <span>Data</span>
+                        <i class="fas fa-chevron-right submenu-icon"></i>
+                    </div>
+                    <div class="submenu">
+                        <a href="{% url 'dashboard-station-data' %}" class="menu-item submenu-item">
+                            <i class="fas fa-chart-line"></i>
+                            <span>Station Data</span>
+                        </a>
+                        <a href="{% url 'dashboard-data-overview' %}" class="menu-item submenu-item">
+                            <i class="fas fa-table"></i>
+                            <span>Data Overview</span>
+                        </a>
+                    </div>
+                </div>
+                <a href="{% url 'dashboard-monitor' %}" class="menu-item">
+                    <i class="fas fa-cog"></i>
+                    <span>Monitor</span>
+                </a>
+                <a href="{% url 'dashboard-settings' %}" class="menu-item">
+                    <i class="fas fa-cog"></i>
+                    <span>Settings</span>
+                </a>
+                <a href="{% url 'dashboard-support' %}" class="menu-item">
+                    <i class="fas fa-sign-out-alt"></i>
+                    <span>Support</span>
+                </a>
+                <form action="{% url 'logout' %}" method="post" class="menu-item logout-form">
+                    {% csrf_token %}
+                    <button type="submit" class="menu-item logout-btn">
+                        <i class="fas fa-sign-out-alt"></i>
+                        <span>Logout</span>
+                    </button>
+                </form>
+            </nav>
+        </div>
+
+        <!-- Contenido principal -->
+        <div class="main-content">
+            {% block dashboard_content %}
+            <!-- Aquí irá el contenido específico de cada sección -->
+            {% endblock %}
+        </div>
+
+        <!-- Panel lateral derecho -->
+        <div class="right-panel">
+            <div class="status-panel">
+                <h3>Estado</h3>
+                <!-- Contenido del panel de estado -->
+            </div>
+            <div class="info-panel">
+                <h3>Información</h3>
+                <!-- Contenido del panel de información -->
+            </div>
+        </div>
+    </div>
+</div>
+
+{% block extra_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const menuToggle = document.getElementById('menuToggle');
+    const sidebar = document.getElementById('sidebar');
+    const dataToggle = document.getElementById('dataToggle');
+    
+    menuToggle.addEventListener('click', function() {
+        document.body.classList.toggle('sidebar-open');
+        sidebar.classList.toggle('active');
+    });
+
+    dataToggle.addEventListener('click', function(e) {
+        e.preventDefault();
+        this.classList.toggle('open');
+        let submenu = this.nextElementSibling;
+        if(submenu.style.maxHeight) {
+            submenu.style.maxHeight = null;
+        } else {
+            submenu.style.maxHeight = submenu.scrollHeight + "px";
+        }
+    });
+});
+</script>
+{% endblock %}
+{% endblock %}

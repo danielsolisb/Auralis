@@ -30,11 +30,13 @@ class SignUpView(CreateView):
         return response
 
 class DashboardView(LoginRequiredMixin, TemplateView):
-    template_name = 'main/dashboard.html'
+    template_name = 'main/dashboard/main_dashboard.html'
     login_url = 'login'
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        context['title']= "Dashboard"
+        context['subtitle']= "Dashboard"
         return context
 
 class DashboardMapView(LoginRequiredMixin, TemplateView):

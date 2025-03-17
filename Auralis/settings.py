@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     'CoreApps.measurements',
     'widget_tweaks',  # Asegúrate que esta línea existe
     'CoreApps.main',
+    'CoreApps.events',
 ]
 
 # Configuración del modelo de usuario personalizado

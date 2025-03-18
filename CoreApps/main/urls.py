@@ -22,4 +22,5 @@ urlpatterns = [
     path('dashboard/monitor/', DashboardMonitorView.as_view(), name='dashboard-monitor'),
     path('dashboard/settings/', DashboardSettingsView.as_view(), name='dashboard-settings'),
     path('dashboard/support/', DashboardSupportView.as_view(), name='dashboard-support'),
+    path('dashboard/data-history/', DashboardSupportView.as_view(), name='dashboard-data-history'),
 ]

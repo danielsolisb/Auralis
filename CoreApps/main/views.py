@@ -37,35 +37,74 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         context['title']= "Dashboard"
         context['subtitle']= "Dashboard"
+        context['user'] = self.request.user
         return context
 
 class DashboardMapView(LoginRequiredMixin, TemplateView):
     template_name = 'main/dashboard/map.html'
     login_url = 'login'
 
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['title']= "Maps"
+        context['subtitle']= "Maps"
+        return context
+
 class DashboardDataView(LoginRequiredMixin, TemplateView):
     template_name = 'main/dashboard/data.html'
     login_url = 'login'
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['title']= "Data"
+        context['subtitle']= "Data"
+        return context
 
 class DashboardMonitorView(LoginRequiredMixin, TemplateView):
     template_name = 'main/dashboard/monitor.html'
     login_url = 'login'
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['title']= "Monitor"
+        context['subtitle']= "Monitor"
+        return context
 
 class DashboardSettingsView(LoginRequiredMixin, TemplateView):
     template_name = 'main/dashboard/settings.html'
     login_url = 'login'
 
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['title']= "Settings"
+        context['subtitle']= "Settings"
+        return context
+
 class DashboardSupportView(LoginRequiredMixin, TemplateView):
     template_name = 'main/dashboard/support.html'
     login_url = 'login'
 
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['title']= "Support"
+        context['subtitle']= "Support"
+        return context
+
 class StationDataView(LoginRequiredMixin, TemplateView):
     template_name = 'main/dashboard/station_data.html'
     login_url = 'login'
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['title']= "Station Data"
+        context['subtitle']= "Station Data"
+        return context
 
 class DataOverviewView(LoginRequiredMixin, TemplateView):
     template_name = 'main/dashboard/data_overview.html'
     login_url = 'login'
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['title']= "Data Overview"
+        context['subtitle']= "Data Overview"
+        return context
 
 class CustomLogoutView(LogoutView):
     next_page = 'login'

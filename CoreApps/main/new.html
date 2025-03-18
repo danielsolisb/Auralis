@@ -1,0 +1,62 @@
+<!--MAIN NAVIGATION-->
+<!--===================================================-->
+<nav id="mainnav-container">
+    <div id="mainnav">
+
+        <!--Menu-->
+        <!--================================-->
+        <div id="mainnav-menu-wrap">
+            <div class="nano">
+                <div class="nano-content">
+
+                    <!--Profile Widget-->
+                    <!--================================-->
+                    <div id="mainnav-profile" class="mainnav-profile">
+                        <div class="profile-wrap text-center">
+                            <div class="pad-btm">
+                                {% if user.profile_image %}
+                                    <img class="img-circle img-md" src="{{ user.profile_image.url }}" alt="Foto de perfil">
+                                {% else %}
+                                    <img class="img-circle img-md" src="{% static 'img/profile-photos/1.png' %}" alt="Foto de perfil">
+                                {% endif %}
+                            </div>
+                            <a href="#profile-nav" class="box-block" data-toggle="collapse" aria-expanded="false">
+                                <span class="pull-right dropdown-toggle">
+                                    <i class="dropdown-caret"></i>
+                                </span>
+                                <p class="mnp-name">{{ user.get_full_name|default:user.email }}</p>
+                                <span class="mnp-desc">{{ user.email }}</span>
+                            </a>
+                        </div>
+                        <div id="profile-nav" class="collapse list-group bg-trans">
+                            <a href="#" class="list-group-item">
+                                <i class="demo-pli-male icon-lg icon-fw"></i> Ver Perfil
+                            </a>
+                            <a href="#" class="list-group-item">
+                                <i class="demo-pli-gear icon-lg icon-fw"></i> Configuración
+                            </a>
+                            <a href="#" class="list-group-item">
+                                <i class="demo-pli-information icon-lg icon-fw"></i> Ayuda
+                            </a>
+                            <a href="{% url 'logout' %}" class="list-group-item">
+                                <i class="demo-pli-unlock icon-lg icon-fw"></i> Cerrar Sesión
+                            </a>
+                        </div>
+                    </div>
+
+                    <!-- ... resto del menú ... -->
+                    
+                    <ul id="mainnav-menu" class="list-group">
+                        <!-- ... elementos del menú ... -->
+                    </ul>
+
+                </div>
+            </div>
+        </div>
+        <!--================================-->
+        <!--End menu-->
+
+    </div>
+</nav>
+<!--===================================================-->
+<!--END MAIN NAVIGATION-->

@@ -46,6 +46,13 @@ class User(AbstractUser):
         blank=True,
         help_text=_('Requerido para administradores, clientes, supervisores y operadores')
     )
+    # Añadimos el campo para la foto de perfil
+    profile_image = models.ImageField(
+        upload_to='profile_images/',
+        null=True,
+        blank=True,
+        verbose_name=_('foto de perfil')
+    )
     identification_type = models.CharField(
         max_length=3,
         choices=[

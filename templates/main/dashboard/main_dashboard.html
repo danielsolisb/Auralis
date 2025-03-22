@@ -1,66 +1,104 @@
-{% extends 'main/dashboard.html' %} 
-{% load static %} 
+{% extends 'main/dashboard.html' %}
+{% load static %}
 
 {% block fixedbar %}
-
-<!--Fixedbar-->
-<!--~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~-->
+<!-- Fixedbar con listado de estaciones y estado -->
 <div class="page-fixedbar-container">
   <div class="page-fixedbar-content">
     <div class="nano">
       <div class="nano-content">
         <div class="pad-all">
-          <span class="pad-ver text-main text-sm text-uppercase text-bold">Total Earning</span>
-          
-          <button class="btn btn-block btn-info mar-top">Payout</button>
+          <h4 class="text-main text-bold">Mis Estaciones</h4>
+          <ul class="list-unstyled">
+            {% for station in stations %}
+            <li class="mar-btm">
+              <span>{{ station.name }}</span>
+              {% if station.is_active %}
+              <span class="label label-success pull-right">Activa</span>
+              {% else %}
+              <span class="label label-danger pull-right">Inactiva</span>
+              {% endif %}
+            </li>
+            {% endfor %}
+          </ul>
         </div>
-        <hr class="new-section-xs" />
-        <div class="pad-hor">
-          <p class="pad-ver text-main text-sm text-uppercase text-bold">
-            Available Items
-          </p>
-          <p>
-            Staciones disponibles
-          </p>
-        </div>
-        <!--===================================================-->
-        <ul class="list-unstyled text-center pad-btm mar-no row">
-          <a>hola</a>
-        </ul>
-
-        <hr class="new-section-xs" />
-
-        <p class="pad-all text-main text-sm text-uppercase text-bold">
-          Estado
-        </p>
-        <!--Simple Menu-->
-        <div class="list-group bg-trans">
-          <a href="#" class="list-group-item"> 
-            Information
-          </a>
-        </div>
-        
-
       </div>
     </div>
   </div>
 </div>
-<!--~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~-->
-<!--End Fixedbar-->
-{% endblock %} 
+{% endblock %}
 
 {% block content %}
-<!--Page content-->
-<!--===================================================-->
 <div id="page-content">
-  <!--Activated Users Chart-->
-  <!--===================================================-->
-  <div class="panel">
-    <div class="panel-body"></div>
+  <!-- Resumen superior -->
+  <div class="row">
+    <!-- Estaciones Activas -->
+    <div class="col-sm-4">
+      <div class="panel panel-bordered panel-success">
+        <div class="panel-body text-center">
+          <h3 class="text-thin">{{ active_count }}</h3>
+          <p>Estaciones Activas</p>
+        </div>
+      </div>
+    </div>
+    <!-- Advertencias -->
+    <div class="col-sm-4">
+      <div class="panel panel-bordered panel-warning">
+        <div class="panel-body text-center">
+          <h3 class="text-thin">{{ warning_count }}</h3>
+          <p>Advertencias</p>
+        </div>
+      </div>
+    </div>
+    <!-- Alarmas -->
+    <div class="col-sm-4">
+      <div class="panel panel-bordered panel-danger">
+        <div class="panel-body text-center">
+          <h3 class="text-thin">{{ alarm_count }}</h3>
+          <p>Alarmas</p>
+        </div>
+      </div>
+    </div>
   </div>
-  <!--===================================================-->
-  <!--End Activated Users chart-->
+
+  <!-- Tarjetas de Estaciones -->
+  <div class="row">
+    {% for station in station_data %}
+    <div class="col-sm-6 col-md-4">
+      <div class="panel panel-primary">
+        <div class="panel-heading">
+          <h3 class="panel-title">{{ station.name }}</h3>
+        </div>
+        <div class="panel-body">
+          <p><strong>Estado:</strong>
+            {% if station.is_active %}
+            <span class="label label-success">Activa</span>
+            {% else %}
+            <span class="label label-danger">Inactiva</span>
+            {% endif %}
+          </p>
+          <h4>Sensores</h4>
+          <ul class="list-group">
+            {% for sensor in station.sensors %}
+            <li class="list-group-item">
+              <strong>{{ sensor.name }}</strong>
+              {% if sensor.last_value %}
+              <span class="pull-right">
+                {{ sensor.last_value }}
+                <small class="text-muted">
+                  {{ sensor.last_timestamp|date:"d/m/Y H:i" }}
+                </small>
+              </span>
+              {% else %}
+              <span class="pull-right text-muted">Sin datos</span>
+              {% endif %}
+            </li>
+            {% endfor %}
+          </ul>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
 </div>
-<!--===================================================-->
-<!--End page content-->
 {% endblock %}

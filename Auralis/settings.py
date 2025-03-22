@@ -175,3 +175,6 @@ LOGOUT_REDIRECT_URL = 'login'
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
+MQTT_BROKER_IP = '34.135.82.255'
+MQTT_BROKER_PORT = 8081

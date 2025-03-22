@@ -2,249 +2,227 @@
 {% load static %} 
 
 {% block fixedbar %}
-
-<!--Fixedbar-->
-<!--~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~-->
+<!-- Fixedbar similar al de monitor -->
 <div class="page-fixedbar-container">
   <div class="page-fixedbar-content">
     <div class="nano">
       <div class="nano-content">
         <div class="pad-all">
-          <span class="pad-ver text-main text-sm text-uppercase text-bold"
-            >Total Earning</span
-          >
-          <p class="text-sm">December 17, 2017</p>
-          <p class="text-2x text-main">$798.54</p>
-          <button class="btn btn-block btn-info mar-top">Payout</button>
-        </div>
-        <hr class="new-section-xs" />
-        <div class="pad-hor">
-          <p class="pad-ver text-main text-sm text-uppercase text-bold">
-            Available Items
-          </p>
-          <p>
-            Get <strong class="text-main">$5.00</strong> off your next bill by
-            making sure your full payment reaches us before August 5, 2018.
-          </p>
-        </div>
-
-        <div class="pad-all">
-          <!--Progress bars with labels-->
-          <!--===================================================-->
-          <div class="progress">
-            <div style="width: 40%" class="progress-bar progress-bar-success">
-              40%
-            </div>
+          <span class="pad-ver text-main text-sm text-uppercase text-bold">SELECCIONE ESTACIÓN</span>
+          <div class="form-group">
+            <select id="station-selector" class="form-control">
+              <option value="">Seleccione una estación</option>
+              {% for station in stations %}
+                <option value="{{ station.id }}">{{ station.name }}</option>
+              {% endfor %}
+            </select>
           </div>
-          <div class="progress">
-            <div style="width: 75%" class="progress-bar progress-bar-warning">
-              75%
-            </div>
+          <!-- Campos de fecha/hora con Flatpickr -->
+          <div class="form-group">
+            <label for="start-date">Fecha y Hora Inicio:</label>
+            <input id="start-date" type="text" class="form-control" placeholder="Selecciona fecha y hora" />
           </div>
-        </div>
-        <!--===================================================-->
-        <ul class="list-unstyled text-center pad-btm mar-no row">
-          <li class="col-xs-6">
-            <span class="text-2x text-normal text-main">1,345</span>
-            <p class="text-muted mar-no">Item Stock</p>
-          </li>
-          <li class="col-xs-6">
-            <span class="text-2x text-normal text-main">278</span>
-            <p class="text-muted mar-no">Sold Out</p>
-          </li>
-        </ul>
+          <div class="form-group">
+            <label for="end-date">Fecha y Hora Fin:</label>
+            <input id="end-date" type="text" class="form-control" placeholder="Selecciona fecha y hora" />
+          </div>
 
-        <hr class="new-section-xs" />
-
-        <p class="pad-all text-main text-sm text-uppercase text-bold">
-          Additional Actions
-        </p>
-
-        <!--Simple Menu-->
-        <div class="list-group bg-trans">
-          <a href="#" class="list-group-item"
-            ><i class="demo-pli-information icon-lg icon-fw"></i> Service
-            Information</a
-          >
-          <a href="#" class="list-group-item"
-            ><i class="demo-pli-mine icon-lg icon-fw"></i> Usage Profile</a
-          >
-          <a href="#" class="list-group-item"
-            ><span class="label label-info pull-right">New</span
-            ><i class="demo-pli-credit-card-2 icon-lg icon-fw"></i> Payment
-            Options</a
-          >
-          <a href="#" class="list-group-item"
-            ><i class="demo-pli-support icon-lg icon-fw"></i> Message Center</a
-          >
-        </div>
-        <ul class="list-group pad-btm bg-trans">
-          <li class="list-header">
-            <p class="text-main text-sm text-uppercase text-bold mar-no">
-              Public Settings
-            </p>
-          </li>
-          <li class="list-group-item">
-            <div class="pull-right">
-              <input
-                class="toggle-switch"
-                id="demo-switch-4"
-                type="checkbox"
-                checked=""
-              />
-              <label for="demo-switch-4"></label>
-            </div>
-            Online status
-          </li>
-          <li class="list-group-item">
-            <div class="pull-right">
-              <input
-                class="toggle-switch"
-                id="demo-switch-5"
-                type="checkbox"
-                checked=""
-              />
-              <label for="demo-switch-5"></label>
-            </div>
-            Show offline contact
-          </li>
-          <li class="list-group-item">
-            <div class="pull-right">
-              <input
-                class="toggle-switch"
-                id="demo-switch-6"
-                type="checkbox"
-                checked=""
-              />
-              <label for="demo-switch-6"></label>
-            </div>
-            Show my device icon
-          </li>
-        </ul>
-
-        <hr />
-        <p class="pad-all text-main text-sm text-uppercase text-bold">
-          Account Settings
-        </p>
-        <ul class="list-group bg-trans">
-          <li class="pad-top list-header">
-            <p class="text-main text-sm text-uppercase text-bold mar-no">
-              Account Settings
-            </p>
-          </li>
-          <li class="list-group-item">
-            <div class="pull-right">
-              <input
-                class="toggle-switch"
-                id="demo-switch-1"
-                type="checkbox"
-                checked=""
-              />
-              <label for="demo-switch-1"></label>
-            </div>
-            <p class="mar-no text-main">Show my personal status</p>
-            <small class="text-muted"
-              >Lorem ipsum dolor sit amet, consectetuer adipiscing elit.</small
-            >
-          </li>
-          <li class="list-group-item">
-            <div class="pull-right">
-              <input
-                class="toggle-switch"
-                id="demo-switch-2"
-                type="checkbox"
-                checked=""
-              />
-              <label for="demo-switch-2"></label>
-            </div>
-            <p class="mar-no text-main">Show offline contact</p>
-            <small class="text-muted"
-              >Aenean commodo ligula eget dolor. Aenean massa.</small
-            >
-          </li>
-          <li class="list-group-item">
-            <div class="pull-right">
-              <input class="toggle-switch" id="demo-switch-3" type="checkbox" />
-              <label for="demo-switch-3"></label>
-            </div>
-            <p class="mar-no text-main">Invisible mode</p>
-            <small class="text-muted"
-              >Cum sociis natoque penatibus et magnis dis parturient montes,
-              nascetur ridiculus mus.
-            </small>
-          </li>
-        </ul>
-
-        <hr />
-        <p class="pad-all text-main text-sm text-uppercase text-bold">
-          Gallery
-        </p>
-        <div class="pad-hor">
-          <div class="row img-gallery">
-            <div class="col-xs-6">
-              <img
-                class="img-responsive"
-                src="img\thumbs\img-3.jpeg"
-                alt="thumbs"
-              />
-            </div>
-            <div class="col-xs-6">
-              <img
-                class="img-responsive"
-                src="img\thumbs\img-6.jpeg"
-                alt="thumbs"
-              />
-            </div>
-            <div class="col-xs-6">
-              <img
-                class="img-responsive"
-                src="img\thumbs\img-4.jpeg"
-                alt="thumbs"
-              />
-            </div>
-            <div class="col-xs-6">
-              <img
-                class="img-responsive"
-                src="img\thumbs\img-2.jpeg"
-                alt="thumbs"
-              />
-            </div>
-            <div class="col-xs-6">
-              <img
-                class="img-responsive"
-                src="img\thumbs\img-5.jpeg"
-                alt="thumbs"
-              />
-            </div>
-            <div class="col-xs-6">
-              <img
-                class="img-responsive"
-                src="img\thumbs\img-1.jpeg"
-                alt="thumbs"
-              />
-            </div>
+          <!-- Botón para consultar datos -->
+          <div class="form-group">
+            <button id="load-data-btn" class="btn btn-primary btn-block" disabled>Consultar Datos</button>
           </div>
         </div>
       </div>
     </div>
   </div>
 </div>
-<!--~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~-->
-<!--End Fixedbar-->
-{% endblock %} 
+{% endblock %}
 
 {% block content %}
-<!--Page content-->
-<!--===================================================-->
 <div id="page-content">
-  <!--Activated Users Chart-->
-  <!--===================================================-->
-  <div class="panel">
-    <div class="panel-body"></div>
+  <h3>Datos de la estación: <span id="station-name"></span></h3>
+  <div id="data-tables-container">
+    <div class="text-center" id="no-data-message">
+      <h3 class="text-muted">Seleccione estación y rango de fechas para consultar datos</h3>
+    </div>
   </div>
-  <!--===================================================-->
-  <!--End Activated Users chart-->
 </div>
-<!--===================================================-->
-<!--End page content-->
+{% endblock %}
+
+{% block script %}
+<!-- ---------------------------------------------------------------------- -->
+<!-- 1) DataTables principal -->
+<link rel="stylesheet" href="https://cdn.datatables.net/1.11.5/css/jquery.dataTables.min.css">
+<script src="https://cdn.datatables.net/1.11.5/js/jquery.dataTables.min.js"></script>
+
+<!-- 2) Extensión DataTables Buttons + dependencias -->
+<link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.3.6/css/buttons.dataTables.min.css">
+<script src="https://cdn.datatables.net/buttons/2.3.6/js/dataTables.buttons.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.3.6/js/buttons.flash.min.js"></script>
+
+<!-- Librerías para exportar a Excel y PDF -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js"></script>
+
+<!-- Extensiones para exportar en HTML5 e imprimir -->
+<script src="https://cdn.datatables.net/buttons/2.3.6/js/buttons.html5.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.3.6/js/buttons.print.min.js"></script>
+
+<!-- 3) Flatpickr para selección de fecha y hora -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/material_blue.css"> <!-- Tema opcional -->
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/es.js"></script>
+
+<script>
+$(document).ready(function() {
+  // 1. Inicializar Flatpickr en los campos de fecha/hora
+  flatpickr("#start-date", {
+    enableTime: true,
+    time_24hr: true,
+    dateFormat: "Y-m-d\\TH:i", // Valor real que se envía al servidor
+    altInput: true,
+    altFormat: "d/m/Y H:i",    // Formato que ve el usuario
+    locale: "es"
+  });
+  flatpickr("#end-date", {
+    enableTime: true,
+    time_24hr: true,
+    dateFormat: "Y-m-d\\TH:i",
+    altInput: true,
+    altFormat: "d/m/Y H:i",
+    locale: "es"
+  });
+
+  // 2. Habilitar o deshabilitar el botón según si hay datos en los inputs
+  function toggleLoadButton() {
+    const stationId = $('#station-selector').val();
+    const startDate = $('#start-date').val();
+    const endDate   = $('#end-date').val();
+    $('#load-data-btn').prop('disabled', !(stationId && startDate && endDate));
+  }
+  $('#station-selector, #start-date, #end-date').on('change keyup', toggleLoadButton);
+
+  // 3. Manejar clic en "Consultar Datos"
+  $('#load-data-btn').click(function() {
+    const stationId = $('#station-selector').val();
+    const startDate = $('#start-date').val(); // "YYYY-MM-DDTHH:mm"
+    const endDate   = $('#end-date').val();
+
+    if (stationId && startDate && endDate) {
+      $('#data-tables-container').html(
+        '<div class="text-center"><i class="fa fa-spinner fa-spin fa-3x"></i><p>Cargando datos...</p></div>'
+      );
+
+      // Llamada AJAX a la vista get_station_data
+      $.ajax({
+        url: "{% url 'get_station_data' %}",
+        data: {
+          station_id: stationId,
+          start_date: startDate,
+          end_date: endDate
+        },
+        method: 'GET',
+        success: function(response) {
+          if (response.sensors) {
+            let html = `<h4>Datos de la estación: ${response.station_name}</h4>`;
+
+            // response.sensors es un array de objetos
+            response.sensors.forEach(sensorObj => {
+              const sensorId   = sensorObj.sensor_id;
+              const sensorName = sensorObj.sensor_name;
+              const readings   = sensorObj.readings;
+
+              html += `
+              <div class="panel panel-default">
+                <div class="panel-heading">
+                  <h3 class="panel-title">${sensorName}</h3>
+                </div>
+                <div class="panel-body">
+                  <table class="table table-bordered sensor-table" id="sensor-table-${sensorId}">
+                    <thead>
+                      <tr>
+                        <th>Fecha/Hora</th>
+                        <th>Valor</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+              `;
+              if (readings.length > 0) {
+                readings.forEach(reading => {
+                  html += `
+                    <tr>
+                      <td>${reading.timestamp}</td>
+                      <td>${reading.value}</td>
+                    </tr>
+                  `;
+                });
+              } else {
+                html += `<tr><td colspan="2" class="text-center">Sin datos en este rango</td></tr>`;
+              }
+
+              html += `
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              `;
+            });
+
+            // Insertar el HTML resultante
+            $('#data-tables-container').html(html);
+
+            // 4. Inicializar DataTables en cada tabla, con los botones de exportación
+            $('.sensor-table').DataTable({
+              pageLength: 15, 
+              lengthMenu: [15, 30, 50, 100],
+              dom: 'Bfrtip',  // Permite que aparezcan los botones
+              buttons: [
+                'copy',       // Copiar al portapapeles
+                'csv',        // Exportar CSV
+                'excel',      // Exportar Excel
+                'pdf',        // Exportar PDF
+                'print'       // Imprimir
+              ],
+              language: {
+                "lengthMenu": "Mostrar _MENU_ registros por página",
+                "zeroRecords": "No hay datos disponibles",
+                "info": "Mostrando página _PAGE_ de _PAGES_",
+                "infoEmpty": "No hay datos disponibles",
+                "infoFiltered": "(filtrado de _MAX_ registros totales)",
+                "search": "Buscar:",
+                "paginate": {
+                  "first": "Primero",
+                  "last": "Último",
+                  "next": "Siguiente",
+                  "previous": "Anterior"
+                },
+                "buttons": {
+                  "copy": "Copiar",
+                  "csv": "CSV",
+                  "excel": "Excel",
+                  "pdf": "PDF",
+                  "print": "Imprimir"
+                }
+              }
+            });
+
+          } else {
+            $('#data-tables-container').html(
+              '<div class="text-center"><h3 class="text-danger">No se encontraron datos</h3></div>'
+            );
+          }
+        },
+        error: function(error) {
+          console.error("Error al cargar datos:", error);
+          $('#data-tables-container').html(
+            '<div class="text-center"><h3 class="text-danger">Error al cargar datos</h3></div>'
+          );
+        }
+      });
+    }
+  });
+});
+</script>
 {% endblock %}

@@ -1,0 +1,229 @@
+{% extends 'main/dashboard.html' %}
+{% load static %}
+
+{% block fixedbar %}
+<!-- Fixedbar con el mismo filtro que StationDataView -->
+<div class="page-fixedbar-container">
+  <div class="page-fixedbar-content">
+    <div class="nano">
+      <div class="nano-content">
+        <div class="pad-all">
+          <span class="pad-ver text-main text-sm text-uppercase text-bold">SELECCIONE ESTACIÓN</span>
+          <div class="form-group">
+            <select id="station-selector" class="form-control">
+              <option value="">Seleccione una estación</option>
+              {% for station in stations %}
+                <option value="{{ station.id }}">{{ station.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <!-- Campos de fecha/hora con Flatpickr -->
+          <div class="form-group">
+            <label for="start-date">Fecha y Hora Inicio:</label>
+            <input id="start-date" type="text" class="form-control" placeholder="Selecciona fecha y hora" />
+          </div>
+          <div class="form-group">
+            <label for="end-date">Fecha y Hora Fin:</label>
+            <input id="end-date" type="text" class="form-control" placeholder="Selecciona fecha y hora" />
+          </div>
+          <!-- Botón para consultar datos -->
+          <div class="form-group">
+            <button id="load-data-btn" class="btn btn-primary btn-block" disabled>Consultar Datos</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="page-content">
+  <h3>Histórico de Datos: <span id="station-name"></span></h3>
+  <div id="charts-container">
+    <div class="text-center" id="no-data-message">
+      <h3 class="text-muted">Seleccione estación y rango de fechas para visualizar gráficos</h3>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block script %}
+<!-- 1) Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<!-- 2) Flatpickr (para fecha/hora) -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/material_blue.css"> <!-- Tema opcional -->
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/es.js"></script>
+
+<script>
+// Función para descargar el gráfico como PNG
+function downloadChart(sensorId) {
+  const chartInstance = window.sensorCharts[sensorId];
+  if (!chartInstance) return;
+
+  const base64URL = chartInstance.toBase64Image();
+  const link = document.createElement('a');
+  link.href = base64URL;
+  link.download = `sensor_${sensorId}.png`;
+  link.click();
+}
+
+$(document).ready(function() {
+  // Inicializar Flatpickr en los campos de fecha/hora
+  flatpickr("#start-date", {
+    enableTime: true,
+    time_24hr: true,
+    dateFormat: "Y-m-d\\TH:i", // Valor ISO que enviamos al servidor
+    altInput: true,
+    altFormat: "d/m/Y H:i",
+    locale: "es"
+  });
+  flatpickr("#end-date", {
+    enableTime: true,
+    time_24hr: true,
+    dateFormat: "Y-m-d\\TH:i",
+    altInput: true,
+    altFormat: "d/m/Y H:i",
+    locale: "es"
+  });
+
+  // Habilitar o deshabilitar el botón según la selección
+  function toggleLoadButton() {
+    const stationId = $('#station-selector').val();
+    const startDate = $('#start-date').val();
+    const endDate   = $('#end-date').val();
+    $('#load-data-btn').prop('disabled', !(stationId && startDate && endDate));
+  }
+  $('#station-selector, #start-date, #end-date').on('change keyup', toggleLoadButton);
+
+  // Manejar clic en "Consultar Datos"
+  $('#load-data-btn').click(function() {
+    const stationId = $('#station-selector').val();
+    const startDate = $('#start-date').val();
+    const endDate   = $('#end-date').val();
+
+    if (stationId && startDate && endDate) {
+      // Mostrar spinner de carga
+      $('#charts-container').html('<div class="text-center"><i class="fa fa-spinner fa-spin fa-3x"></i><p>Cargando datos...</p></div>');
+
+      $.ajax({
+        url: "{% url 'get_station_data' %}",
+        data: { station_id: stationId, start_date: startDate, end_date: endDate },
+        method: 'GET',
+        success: function(response) {
+          if (response.sensors) {
+            let html = `<h4>Histórico de datos de la estación: ${response.station_name}</h4>`;
+
+            // Crear un panel por cada sensor
+            response.sensors.forEach(function(sensorObj) {
+              const sensorId = sensorObj.sensor_id;
+              const sensorName = sensorObj.sensor_name;
+              html += `
+                <div class="panel panel-default">
+                  <div class="panel-heading">
+                    <h3 class="panel-title">${sensorName}</h3>
+                  </div>
+                  <div class="panel-body">
+                    <!-- Fijar altura y permitir a Chart.js ocupar ese espacio -->
+                    <div class="chart-container" style="height: 300px;">
+                      <canvas id="chart-sensor-${sensorId}"></canvas>
+                    </div>
+                    <!-- Botón para descargar la imagen PNG -->
+                    <button class="btn btn-sm btn-primary mar-top" onclick="downloadChart(${sensorId})">
+                      Descargar PNG
+                    </button>
+                  </div>
+                </div>
+              `;
+            });
+            $('#charts-container').html(html);
+
+            // Objeto global para almacenar instancias de los gráficos
+            window.sensorCharts = {};
+
+            // Inicializar cada gráfico con Chart.js
+            response.sensors.forEach(function(sensorObj) {
+              const sensorId = sensorObj.sensor_id;
+              const readings = sensorObj.readings;
+
+              // Aquí NO usamos Date(...) para evitar desplazamientos
+              // En su lugar, tratamos cada timestamp como texto (categoría)
+              const labels = [];
+              const dataValues = [];
+
+              readings.forEach(function(reading) {
+                // reading.timestamp: Ej. "2025-03-21T20:30:00"
+                // Pequeño formateo: quitar segundos, reemplazar 'T' por espacio, etc.
+                // Quedará "2025-03-21 20:30"
+                let naiveLabel = reading.timestamp.slice(0,16).replace('T',' ');
+                labels.push(naiveLabel);
+                dataValues.push(reading.value);
+              });
+
+              const canvas = document.getElementById('chart-sensor-' + sensorId);
+              const ctx = canvas.getContext('2d');
+
+              // Crear un degradado vertical
+              const gradient = ctx.createLinearGradient(0, 0, 0, 300);
+              gradient.addColorStop(0, 'rgba(46, 134, 193, 0.5)');
+              gradient.addColorStop(1, 'rgba(46, 134, 193, 0)');
+
+              const chartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                  labels: labels, // Son cadenas, no fechas
+                  datasets: [{
+                    label: sensorObj.sensor_name,
+                    data: dataValues,
+                    borderColor: 'rgba(46, 134, 193, 1)',
+                    backgroundColor: gradient,
+                    borderWidth: 2,
+                    tension: 0.3,
+                    fill: true,
+                    pointRadius: 0,
+                    pointHoverRadius: 5
+                  }]
+                },
+                options: {
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  scales: {
+                    // Eje X como categoría para NO interpretar zona horaria
+                    x: {
+                      type: 'category',
+                      ticks: {
+                        autoSkip: true,
+                        maxTicksLimit: 10
+                      }
+                    },
+                    y: {
+                      beginAtZero: false
+                    }
+                  },
+                  plugins: {
+                    legend: {
+                      display: false
+                    }
+                  }
+                }
+              });
+
+              window.sensorCharts[sensorId] = chartInstance;
+            });
+          } else {
+            $('#charts-container').html('<div class="text-center"><h3 class="text-danger">No se encontraron datos</h3></div>');
+          }
+        },
+        error: function(error) {
+          console.error("Error al cargar datos:", error);
+          $('#charts-container').html('<div class="text-center"><h3 class="text-danger">Error al cargar datos</h3></div>');
+        }
+      });
+    }
+  });
+});
+</script>
+{% endblock %}

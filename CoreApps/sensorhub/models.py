@@ -1,6 +1,7 @@
 from django.db import models
 from django.conf import settings
 from django.utils.translation import gettext_lazy as _
+from CoreApps.users.models import Company
 
 class Station(models.Model):
     name = models.CharField(
@@ -29,20 +30,33 @@ class Station(models.Model):
         null=True,
         blank=True
     )
-    owner = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
+    # Asociación a la empresa, que nos permitirá filtrar los usuarios
+    company = models.ForeignKey(
+        Company,
         on_delete=models.PROTECT,
-        related_name='owned_stations',
-        verbose_name=_('propietario'),
-        limit_choices_to={'user_type': 'CL'}
+        verbose_name=_('empresa'), null=False
     )
-    supervisors = models.ManyToManyField(
+    # Relación con usuarios: se permite asociar cualquier usuario
+    related_users = models.ManyToManyField(
         settings.AUTH_USER_MODEL,
-        related_name='supervised_stations',
-        verbose_name=_('supervisores'),
-        limit_choices_to={'user_type': 'SV'},
-        blank=True  # Hacemos el campo opcional
+        related_name='stations',
+        verbose_name=_('usuarios asociados'),
+        blank=True
     )
+    #owner = models.ForeignKey(
+    #    settings.AUTH_USER_MODEL,
+    #    on_delete=models.PROTECT,
+    #    related_name='owned_stations',
+    #    verbose_name=_('propietario'),
+    #    limit_choices_to={'user_type': 'CL'}
+    #)
+    #supervisors = models.ManyToManyField(
+    #    settings.AUTH_USER_MODEL,
+    #    related_name='supervised_stations',
+    #    verbose_name=_('supervisores'),
+    #    limit_choices_to={'user_type': 'SV'},
+    #    blank=True  # Hacemos el campo opcional
+    #)
     is_active = models.BooleanField(
         _('activo'),
         default=True
@@ -61,18 +75,42 @@ class Station(models.Model):
         verbose_name_plural = _('estaciones')
         ordering = ['name']
 
+    #def __str__(self):
+    #    return f"{self.name} - {self.owner}"
     def __str__(self):
-        return f"{self.name} - {self.owner}"
+        return f"{self.name} - {self.company}"
 
     def clean(self):
         super().clean()
-        # Solo validar supervisores si la estación ya existe (tiene ID)
-        if self.pk and self.supervisors.exists():
-            for supervisor in self.supervisors.all():
-                if supervisor.company != self.owner.company:
+        if not self.pk:
+            # La instancia aún no se ha guardado, se omite la validación many-to-many.
+            return
+        for user in self.related_users.all():
+            # Aquí realizas las validaciones correspondientes.
+            if user.user_type in [user.UserType.CLIENT, user.UserType.SUPERVISOR]:
+                if user.company != self.company:
                     raise ValidationError({
-                        'supervisors': _('Los supervisores deben pertenecer a la misma empresa que el propietario')
+                        'related_users': _(
+                            'Los usuarios de tipo Cliente y Supervisor deben pertenecer a la misma empresa que la estación.'
+                        )
                     })
+            elif user.user_type in [user.UserType.OPERATOR, user.UserType.INSTALLER, user.UserType.SUPERUSER]:
+                if not user.company or not user.company.is_platform_owner:
+                    raise ValidationError({
+                        'related_users': _(
+                            'Los usuarios de tipo Operador, Instalador y Superuser deben pertenecer a la empresa propietaria de la plataforma.'
+                        )
+                    })
+
+    #def clean(self):
+    #    super().clean()
+    #    # Solo validar supervisores si la estación ya existe (tiene ID)
+    #    if self.pk and self.supervisors.exists():
+    #        for supervisor in self.supervisors.all():
+    #            if supervisor.company != self.owner.company:
+    #                raise ValidationError({
+    #                    'supervisors': _('Los supervisores deben pertenecer a la misma empresa que el propietario')
+    #                })
 
 class SensorType(models.Model):
     name = models.CharField(

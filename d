@@ -97,35 +97,40 @@
   });
   
   function initMQTTClient() {
-  const clientId = "auralis_dashboard_" + Math.random().toString(16).substr(2, 8);
-  console.log("Inicializando cliente MQTT con ID:", clientId);
-  
-  try {
-    mqttClient = new Paho.MQTT.Client(
-    "{{ mqtt_broker_ip }}",
-    Number("{{ mqtt_broker_port }}"),
-    "/", // Especificamos el path que usa tu broker websockets
-    clientId
-    );
+    // Generate a random client ID
+    const clientId = "auralis_dashboard_" + Math.random().toString(16).substr(2, 8);
     
-    mqttClient.onConnectionLost = onConnectionLost;
-    mqttClient.onMessageArrived = onMessageArrived;
+    console.log("Inicializando cliente MQTT con ID:", clientId);
     
-    mqttClient.connect({
-      onSuccess: onConnect,
-      onFailure: function(e) {
-        console.error("Conexión MQTT fallida:", e);
-        console.log("Continuando sin conexión MQTT. Los datos en tiempo real no estarán disponibles.");
-      },
-      useSSL: false, // Conexión sin SSL
-      keepAliveInterval: 60
-    });
-  } catch (e) {
-    console.error("Error inicializando cliente MQTT:", e);
-    console.log("Continuando sin conexión MQTT. Los datos en tiempo real no estarán disponibles.");
+    try {
+      // Connect to MQTT broker
+      mqttClient = new Paho.MQTT.Client(
+        window.location.hostname, // Use the same hostname as the web server
+        9001, // WebSocket port for MQTT
+        clientId
+      );
+      
+      // Set callback handlers
+      mqttClient.onConnectionLost = onConnectionLost;
+      mqttClient.onMessageArrived = onMessageArrived;
+      
+      // Connect
+      mqttClient.connect({
+        onSuccess: onConnect,
+        onFailure: function(e) {
+          console.error("Conexión MQTT fallida:", e);
+          // No bloquear la funcionalidad principal si MQTT falla
+          console.log("Continuando sin conexión MQTT. Los datos en tiempo real no estarán disponibles.");
+        },
+        useSSL: window.location.protocol === "https:",
+        keepAliveInterval: 60
+      });
+    } catch (e) {
+      console.error("Error inicializando cliente MQTT:", e);
+      // No bloquear la funcionalidad principal si MQTT falla
+      console.log("Continuando sin conexión MQTT. Los datos en tiempo real no estarán disponibles.");
+    }
   }
-}
-
   
   // Modificar la función subscribeToTopic para manejar el caso donde MQTT no está conectado
   function subscribeToTopic(topic) {

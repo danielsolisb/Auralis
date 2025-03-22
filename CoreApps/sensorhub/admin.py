@@ -8,11 +8,15 @@ class SensorInline(admin.TabularInline):
 
 @admin.register(Station)
 class StationAdmin(admin.ModelAdmin):
-    list_display = ('name', 'owner', 'location', 'is_active')
-    list_filter = ('owner', 'is_active')
-    search_fields = ('name', 'description', 'location', 'owner__email')
-    inlines = [SensorInline]
-    filter_horizontal = ('supervisors',)
+    list_display = ('name', 'company', 'location', 'is_active', 'get_related_users')
+    list_filter = ('company', 'is_active')
+    search_fields = ('name', 'description', 'location', 'company__name')
+    # Ahora solo se muestra el campo relacionado que existe
+    filter_horizontal = ('related_users',)  
+    
+    def get_related_users(self, obj):
+        return ", ".join([str(user) for user in obj.related_users.all()])
+    get_related_users.short_description = 'Usuarios asociados'
 
 @admin.register(SensorType)
 class SensorTypeAdmin(admin.ModelAdmin):

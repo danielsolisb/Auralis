@@ -2,240 +2,307 @@
 {% load static %}
 
 {% block fixedbar %}
-
-<!--Fixedbar-->
-<!--~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~-->
+<!-- Fixedbar: Mismo filtro que en StationDataView y DataHistoryView -->
 <div class="page-fixedbar-container">
   <div class="page-fixedbar-content">
     <div class="nano">
       <div class="nano-content">
         <div class="pad-all">
-          <span class="pad-ver text-main text-sm text-uppercase text-bold"
-            >Total Earning</span
-          >
-          <p class="text-sm">December 17, 2017</p>
-          <p class="text-2x text-main">$798.54</p>
-          <button class="btn btn-block btn-info mar-top">Payout</button>
-        </div>
-        <hr class="new-section-xs" />
-        <div class="pad-hor">
-          <p class="pad-ver text-main text-sm text-uppercase text-bold">
-            Available Items
-          </p>
-          <p>
-            Get <strong class="text-main">$5.00</strong> off your next bill by
-            making sure your full payment reaches us before August 5, 2018.
-          </p>
-        </div>
-
-        <div class="pad-all">
-          <!--Progress bars with labels-->
-          <!--===================================================-->
-          <div class="progress">
-            <div style="width: 40%" class="progress-bar progress-bar-success">
-              40%
-            </div>
+          <span class="pad-ver text-main text-sm text-uppercase text-bold">SELECCIONE ESTACIÓN</span>
+          <div class="form-group">
+            <select id="station-selector" class="form-control">
+              <option value="">Seleccione una estación</option>
+              {% for station in stations %}
+                <option value="{{ station.id }}">{{ station.name }}</option>
+              {% endfor %}
+            </select>
           </div>
-          <div class="progress">
-            <div style="width: 75%" class="progress-bar progress-bar-warning">
-              75%
-            </div>
+          <!-- Campos de fecha/hora con Flatpickr -->
+          <div class="form-group">
+            <label for="start-date">Fecha y Hora Inicio:</label>
+            <input id="start-date" type="text" class="form-control" placeholder="Selecciona fecha y hora" />
           </div>
-        </div>
-        <!--===================================================-->
-        <ul class="list-unstyled text-center pad-btm mar-no row">
-          <li class="col-xs-6">
-            <span class="text-2x text-normal text-main">1,345</span>
-            <p class="text-muted mar-no">Item Stock</p>
-          </li>
-          <li class="col-xs-6">
-            <span class="text-2x text-normal text-main">278</span>
-            <p class="text-muted mar-no">Sold Out</p>
-          </li>
-        </ul>
-
-        <hr class="new-section-xs" />
-
-        <p class="pad-all text-main text-sm text-uppercase text-bold">
-          Additional Actions
-        </p>
-
-        <!--Simple Menu-->
-        <div class="list-group bg-trans">
-          <a href="#" class="list-group-item"
-            ><i class="demo-pli-information icon-lg icon-fw"></i> Service
-            Information</a
-          >
-          <a href="#" class="list-group-item"
-            ><i class="demo-pli-mine icon-lg icon-fw"></i> Usage Profile</a
-          >
-          <a href="#" class="list-group-item"
-            ><span class="label label-info pull-right">New</span
-            ><i class="demo-pli-credit-card-2 icon-lg icon-fw"></i> Payment
-            Options</a
-          >
-          <a href="#" class="list-group-item"
-            ><i class="demo-pli-support icon-lg icon-fw"></i> Message Center</a
-          >
-        </div>
-        <ul class="list-group pad-btm bg-trans">
-          <li class="list-header">
-            <p class="text-main text-sm text-uppercase text-bold mar-no">
-              Public Settings
-            </p>
-          </li>
-          <li class="list-group-item">
-            <div class="pull-right">
-              <input
-                class="toggle-switch"
-                id="demo-switch-4"
-                type="checkbox"
-                checked=""
-              />
-              <label for="demo-switch-4"></label>
-            </div>
-            Online status
-          </li>
-          <li class="list-group-item">
-            <div class="pull-right">
-              <input
-                class="toggle-switch"
-                id="demo-switch-5"
-                type="checkbox"
-                checked=""
-              />
-              <label for="demo-switch-5"></label>
-            </div>
-            Show offline contact
-          </li>
-          <li class="list-group-item">
-            <div class="pull-right">
-              <input
-                class="toggle-switch"
-                id="demo-switch-6"
-                type="checkbox"
-                checked=""
-              />
-              <label for="demo-switch-6"></label>
-            </div>
-            Show my device icon
-          </li>
-        </ul>
-
-        <hr />
-        <p class="pad-all text-main text-sm text-uppercase text-bold">
-          Account Settings
-        </p>
-        <ul class="list-group bg-trans">
-          <li class="pad-top list-header">
-            <p class="text-main text-sm text-uppercase text-bold mar-no">
-              Account Settings
-            </p>
-          </li>
-          <li class="list-group-item">
-            <div class="pull-right">
-              <input
-                class="toggle-switch"
-                id="demo-switch-1"
-                type="checkbox"
-                checked=""
-              />
-              <label for="demo-switch-1"></label>
-            </div>
-            <p class="mar-no text-main">Show my personal status</p>
-            <small class="text-muted"
-              >Lorem ipsum dolor sit amet, consectetuer adipiscing elit.</small
-            >
-          </li>
-          <li class="list-group-item">
-            <div class="pull-right">
-              <input
-                class="toggle-switch"
-                id="demo-switch-2"
-                type="checkbox"
-                checked=""
-              />
-              <label for="demo-switch-2"></label>
-            </div>
-            <p class="mar-no text-main">Show offline contact</p>
-            <small class="text-muted"
-              >Aenean commodo ligula eget dolor. Aenean massa.</small
-            >
-          </li>
-          <li class="list-group-item">
-            <div class="pull-right">
-              <input class="toggle-switch" id="demo-switch-3" type="checkbox" />
-              <label for="demo-switch-3"></label>
-            </div>
-            <p class="mar-no text-main">Invisible mode</p>
-            <small class="text-muted"
-              >Cum sociis natoque penatibus et magnis dis parturient montes,
-              nascetur ridiculus mus.
-            </small>
-          </li>
-        </ul>
-
-        <hr />
-        <p class="pad-all text-main text-sm text-uppercase text-bold">
-          Gallery
-        </p>
-        <div class="pad-hor">
-          <div class="row img-gallery">
-            <div class="col-xs-6">
-              <img
-                class="img-responsive"
-                src="img\thumbs\img-3.jpeg"
-                alt="thumbs"
-              />
-            </div>
-            <div class="col-xs-6">
-              <img
-                class="img-responsive"
-                src="img\thumbs\img-6.jpeg"
-                alt="thumbs"
-              />
-            </div>
-            <div class="col-xs-6">
-              <img
-                class="img-responsive"
-                src="img\thumbs\img-4.jpeg"
-                alt="thumbs"
-              />
-            </div>
-            <div class="col-xs-6">
-              <img
-                class="img-responsive"
-                src="img\thumbs\img-2.jpeg"
-                alt="thumbs"
-              />
-            </div>
-            <div class="col-xs-6">
-              <img
-                class="img-responsive"
-                src="img\thumbs\img-5.jpeg"
-                alt="thumbs"
-              />
-            </div>
-            <div class="col-xs-6">
-              <img
-                class="img-responsive"
-                src="img\thumbs\img-1.jpeg"
-                alt="thumbs"
-              />
-            </div>
+          <div class="form-group">
+            <label for="end-date">Fecha y Hora Fin:</label>
+            <input id="end-date" type="text" class="form-control" placeholder="Selecciona fecha y hora" />
+          </div>
+          <!-- Botón para consultar datos -->
+          <div class="form-group">
+            <button id="load-data-btn" class="btn btn-primary btn-block" disabled>Consultar Datos</button>
           </div>
         </div>
       </div>
     </div>
   </div>
 </div>
-<!--~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~-->
-<!--End Fixedbar-->
-{% endblock %} 
+{% endblock %}
 
-{%  block content %}
-<div class="data-overview-container">
-    <h2>Data Overview</h2>
-    <!-- Contenido específico de vista general de datos -->
+{% block content %}
+<div id="page-content">
+  <h3>Reporte de Datos: <span id="station-name"></span></h3>
+  <div id="report-container">
+    <div class="text-center" id="no-data-message">
+      <h3 class="text-muted">Seleccione estación y rango de fechas para ver el reporte</h3>
+    </div>
+  </div>
 </div>
+{% endblock %}
+
+{% block script %}
+<!-- Incluir DataTables -->
+<link rel="stylesheet" href="https://cdn.datatables.net/1.11.5/css/jquery.dataTables.min.css">
+<script src="https://cdn.datatables.net/1.11.5/js/jquery.dataTables.min.js"></script>
+
+<!-- Incluir DataTables Buttons (opcional para exportar las tablas) -->
+<link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.3.6/css/buttons.dataTables.min.css">
+<script src="https://cdn.datatables.net/buttons/2.3.6/js/dataTables.buttons.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.3.6/js/buttons.flash.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.3.6/js/buttons.html5.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.3.6/js/buttons.print.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js"></script>
+
+<!-- Incluir Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<!-- Incluir Flatpickr -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/material_blue.css">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/es.js"></script>
+
+<script>
+// Función para descargar gráfico como PNG
+function downloadChart(sensorId) {
+  const chartInstance = window.sensorCharts[sensorId];
+  if (!chartInstance) return;
+  const base64URL = chartInstance.toBase64Image();
+  const link = document.createElement('a');
+  link.href = base64URL;
+  link.download = `sensor_${sensorId}.png`;
+  link.click();
+}
+
+$(document).ready(function() {
+  // Inicializar Flatpickr
+  flatpickr("#start-date", {
+    enableTime: true,
+    time_24hr: true,
+    dateFormat: "Y-m-d\\TH:i",
+    altInput: true,
+    altFormat: "d/m/Y H:i",
+    locale: "es"
+  });
+  flatpickr("#end-date", {
+    enableTime: true,
+    time_24hr: true,
+    dateFormat: "Y-m-d\\TH:i",
+    altInput: true,
+    altFormat: "d/m/Y H:i",
+    locale: "es"
+  });
+
+  // Habilitar/deshabilitar botón
+  function toggleLoadButton() {
+    const stationId = $('#station-selector').val();
+    const startDate = $('#start-date').val();
+    const endDate   = $('#end-date').val();
+    $('#load-data-btn').prop('disabled', !(stationId && startDate && endDate));
+  }
+  $('#station-selector, #start-date, #end-date').on('change keyup', toggleLoadButton);
+
+  // Al hacer clic en "Consultar Datos"
+  $('#load-data-btn').click(function() {
+    const stationId = $('#station-selector').val();
+    const startDate = $('#start-date').val();
+    const endDate   = $('#end-date').val();
+
+    if (stationId && startDate && endDate) {
+      $('#report-container').html('<div class="text-center"><i class="fa fa-spinner fa-spin fa-3x"></i><p>Cargando reporte...</p></div>');
+
+      $.ajax({
+        url: "{% url 'get_station_data' %}",
+        data: { station_id: stationId, start_date: startDate, end_date: endDate },
+        method: 'GET',
+        success: function(response) {
+          if (response.sensors) {
+            $('#station-name').text(response.station_name);
+            let html = `<h4>Reporte de datos de la estación: ${response.station_name}</h4>`;
+
+            // Por cada sensor, generar sección con tabla, gráfico y resumen
+            response.sensors.forEach(function(sensorObj) {
+              const sensorId = sensorObj.sensor_id;
+              const sensorName = sensorObj.sensor_name;
+              const readings = sensorObj.readings;
+              const summary = sensorObj.summary; // {max_value, min_value, avg_value, total_alarms, total_warnings}
+
+              // Generar tabla de datos
+              let tableHTML = `
+                <table class="table table-bordered sensor-table" id="table-sensor-${sensorId}">
+                  <thead>
+                    <tr>
+                      <th>Fecha/Hora</th>
+                      <th>Valor</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+              `;
+              if (readings.length > 0) {
+                readings.forEach(function(reading) {
+                  tableHTML += `
+                    <tr>
+                      <td>${reading.timestamp}</td>
+                      <td>${reading.value}</td>
+                    </tr>
+                  `;
+                });
+              } else {
+                tableHTML += `<tr><td colspan="2" class="text-center">Sin datos</td></tr>`;
+              }
+              tableHTML += `</tbody></table>`;
+
+              // Sección para gráfico y resumen
+              html += `
+                <div class="panel panel-default">
+                  <div class="panel-heading">
+                    <h3 class="panel-title">${sensorName}</h3>
+                  </div>
+                  <div class="panel-body">
+                    <h4>Tabla de Datos</h4>
+                    ${tableHTML}
+                    <h4>Gráfico</h4>
+                    <div class="chart-container" style="height: 300px;">
+                      <canvas id="chart-sensor-${sensorId}"></canvas>
+                    </div>
+                    <button class="btn btn-sm btn-primary mar-top" onclick="downloadChart(${sensorId})">
+                      Descargar PNG
+                    </button>
+                    <h4>Resumen</h4>
+                    <table class="table table-bordered">
+                      <thead>
+                        <tr>
+                          <th>Máximo</th>
+                          <th>Hora Máx.</th>
+                          <th>Mínimo</th>
+                          <th>Hora Mín.</th>
+                          <th>Promedio</th>
+                          <th>Total Alarmas</th>
+                          <th>Total Advertencias</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          <td>${summary.max_value !== null ? summary.max_value : 'N/A'}</td>
+                          <td>${summary.max_timestamp ? summary.max_timestamp.slice(0,16).replace('T',' ') : 'N/A'}</td>
+                          <td>${summary.min_value !== null ? summary.min_value : 'N/A'}</td>
+                          <td>${summary.min_timestamp ? summary.min_timestamp.slice(0,16).replace('T',' ') : 'N/A'}</td>
+                          <td>${summary.avg_value !== null ? summary.avg_value.toFixed(2) : 'N/A'}</td>
+                          <td>${summary.total_alarms}</td>
+                          <td>${summary.total_warnings}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              `;
+            });
+            $('#report-container').html(html);
+
+            // Inicializar DataTables en cada tabla de datos
+            $('.sensor-table').DataTable({
+              pageLength: 15,
+              lengthMenu: [15, 30, 50, 100],
+              dom: 'Bfrtip',
+              buttons: ['copy','csv','excel','pdf','print'],
+              language: {
+                "lengthMenu": "Mostrar _MENU_ registros por página",
+                "zeroRecords": "No hay datos disponibles",
+                "info": "Mostrando página _PAGE_ de _PAGES_",
+                "infoEmpty": "No hay datos disponibles",
+                "infoFiltered": "(filtrado de _MAX_ registros totales)",
+                "search": "Buscar:",
+                "paginate": {
+                  "first": "Primero",
+                  "last": "Último",
+                  "next": "Siguiente",
+                  "previous": "Anterior"
+                },
+                "buttons": {
+                  "copy": "Copiar",
+                  "csv": "CSV",
+                  "excel": "Excel",
+                  "pdf": "PDF",
+                  "print": "Imprimir"
+                }
+              }
+            });
+
+            // Objeto global para los gráficos
+            window.sensorCharts = {};
+
+            // Inicializar gráficos para cada sensor con Chart.js
+            response.sensors.forEach(function(sensorObj) {
+              const sensorId = sensorObj.sensor_id;
+              const readings = sensorObj.readings;
+              // Para el gráfico, tratamos el timestamp como cadena (categoría)
+              const labels = [];
+              const dataValues = [];
+              readings.forEach(function(reading) {
+                let naiveLabel = reading.timestamp.slice(0,16).replace('T',' ');
+                labels.push(naiveLabel);
+                dataValues.push(reading.value);
+              });
+              const canvas = document.getElementById('chart-sensor-' + sensorId);
+              const ctx = canvas.getContext('2d');
+              const gradient = ctx.createLinearGradient(0, 0, 0, 300);
+              gradient.addColorStop(0, 'rgba(46, 134, 193, 0.5)');
+              gradient.addColorStop(1, 'rgba(46, 134, 193, 0)');
+              const chartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                  labels: labels,
+                  datasets: [{
+                    label: sensorObj.sensor_name,
+                    data: dataValues,
+                    borderColor: 'rgba(46, 134, 193, 1)',
+                    backgroundColor: gradient,
+                    borderWidth: 2,
+                    tension: 0.3,
+                    fill: true,
+                    pointRadius: 0,
+                    pointHoverRadius: 5
+                  }]
+                },
+                options: {
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  scales: {
+                    x: {
+                      type: 'category',
+                      ticks: {
+                        autoSkip: true,
+                        maxTicksLimit: 10
+                      }
+                    },
+                    y: { beginAtZero: false }
+                  },
+                  plugins: { legend: { display: false } }
+                }
+              });
+              window.sensorCharts[sensorId] = chartInstance;
+            });
+          } else {
+            $('#report-container').html('<div class="text-center"><h3 class="text-danger">No se encontraron datos</h3></div>');
+          }
+        },
+        error: function(error) {
+          console.error("Error al cargar datos:", error);
+          $('#report-container').html('<div class="text-center"><h3 class="text-danger">Error al cargar datos</h3></div>');
+        }
+      });
+    }
+  });
+});
+</script>
 {% endblock %}

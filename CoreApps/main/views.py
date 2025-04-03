@@ -215,46 +215,108 @@ class StationDataView(LoginRequiredMixin, TemplateView):
         context['stations'] = Station.objects.filter(related_users=self.request.user)
         return context
 
-
 @login_required
 def get_station_data(request):
     station_id = request.GET.get('station_id')
-    start_str = request.GET.get('start_date')  # Esto llega con formato "YYYY-MM-DDTHH:mm"
-    end_str = request.GET.get('end_date')      # Ej: "2025-03-21T08:30"
+    start_str = request.GET.get('start_date')  # Formato "YYYY-MM-DDTHH:mm"
+    end_str = request.GET.get('end_date')      # Formato "YYYY-MM-DDTHH:mm"
 
-    # 1. Validar que los parámetros existan
     if not station_id or not start_str or not end_str:
         return JsonResponse({'error': 'Faltan parámetros: station_id, start_date y end_date'}, status=400)
 
-    # 2. Intentar parsear las fechas usando fromisoformat
     try:
         start_dt = datetime.fromisoformat(start_str)
         end_dt = datetime.fromisoformat(end_str)
     except ValueError:
         return JsonResponse({'error': 'Formato de fecha/hora inválido. Use YYYY-MM-DDTHH:MM'}, status=400)
 
-    # 3. Verificar que la estación pertenezca al usuario, etc.
     try:
         station = Station.objects.get(id=station_id, related_users=request.user)
     except Station.DoesNotExist:
         return JsonResponse({'error': 'Estación no encontrada'}, status=404)
 
-    # 4. Filtrar mediciones (Measurement) en ese rango de fechas
     sensor_data = []
+    from CoreApps.events.models import Alarm, Warning  # Asegúrate de importar estos modelos
     for sensor in station.sensors.all():
         measurements_qs = sensor.measurements.filter(timestamp__range=[start_dt, end_dt]).order_by('timestamp')
         readings = list(measurements_qs.values('timestamp', 'value', 'is_valid'))
+        summary = {}
+        if readings:
+            values = [r['value'] for r in readings]
+            max_val = max(values)
+            min_val = min(values)
+            avg_val = sum(values) / len(values)
+            # Obtener el primer registro que tiene el valor máximo y mínimo
+            max_reading = next(r for r in readings if r['value'] == max_val)
+            min_reading = next(r for r in readings if r['value'] == min_val)
+            summary['max_value'] = max_val
+            summary['min_value'] = min_val
+            summary['avg_value'] = avg_val
+            summary['max_timestamp'] = max_reading['timestamp']
+            summary['min_timestamp'] = min_reading['timestamp']
+        else:
+            summary['max_value'] = None
+            summary['min_value'] = None
+            summary['avg_value'] = None
+            summary['max_timestamp'] = None
+            summary['min_timestamp'] = None
+        alarm_count = Alarm.objects.filter(sensor=sensor, timestamp__range=[start_dt, end_dt]).count()
+        warning_count = Warning.objects.filter(sensor=sensor, timestamp__range=[start_dt, end_dt]).count()
+        summary['total_alarms'] = alarm_count
+        summary['total_warnings'] = warning_count
 
         sensor_data.append({
             'sensor_id': sensor.id,
             'sensor_name': sensor.name,
-            'readings': readings
+            'readings': readings,
+            'summary': summary,
         })
 
     return JsonResponse({
         'station_name': station.name,
         'sensors': sensor_data
     })
+
+
+#@login_required
+#def get_station_data(request):
+#    station_id = request.GET.get('station_id')
+#    start_str = request.GET.get('start_date')  # Esto llega con formato "YYYY-MM-DDTHH:mm"
+#    end_str = request.GET.get('end_date')      # Ej: "2025-03-21T08:30"
+#
+#    # 1. Validar que los parámetros existan
+#    if not station_id or not start_str or not end_str:
+#        return JsonResponse({'error': 'Faltan parámetros: station_id, start_date y end_date'}, status=400)
+#
+#    # 2. Intentar parsear las fechas usando fromisoformat
+#    try:
+#        start_dt = datetime.fromisoformat(start_str)
+#        end_dt = datetime.fromisoformat(end_str)
+#    except ValueError:
+#        return JsonResponse({'error': 'Formato de fecha/hora inválido. Use YYYY-MM-DDTHH:MM'}, status=400)
+#
+#    # 3. Verificar que la estación pertenezca al usuario, etc.
+#    try:
+#        station = Station.objects.get(id=station_id, related_users=request.user)
+#    except Station.DoesNotExist:
+#        return JsonResponse({'error': 'Estación no encontrada'}, status=404)
+#
+#    # 4. Filtrar mediciones (Measurement) en ese rango de fechas
+#    sensor_data = []
+#    for sensor in station.sensors.all():
+#        measurements_qs = sensor.measurements.filter(timestamp__range=[start_dt, end_dt]).order_by('timestamp')
+#        readings = list(measurements_qs.values('timestamp', 'value', 'is_valid'))
+#
+#        sensor_data.append({
+#            'sensor_id': sensor.id,
+#            'sensor_name': sensor.name,
+#            'readings': readings
+#        })
+#
+#    return JsonResponse({
+#        'station_name': station.name,
+#        'sensors': sensor_data
+#    })
 
 class DataHistoryView(LoginRequiredMixin, TemplateView):
     template_name = 'main/dashboard/data_history.html'
@@ -279,10 +341,13 @@ class DataHistoryView(LoginRequiredMixin, TemplateView):
 class DataReportView(LoginRequiredMixin, TemplateView):
     template_name = 'main/dashboard/data_report.html'
     login_url = 'login'
+    
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['title']= "Data Overview"
-        context['subtitle']= "Data Overview"
+        # Pasar las estaciones asociadas para el filtro
+        context['stations'] = Station.objects.filter(related_users=self.request.user)
+        context['title'] = "Data Report"
+        context['subtitle'] = "Reporte de Datos"
         return context
 
 class CustomLogoutView(LogoutView):

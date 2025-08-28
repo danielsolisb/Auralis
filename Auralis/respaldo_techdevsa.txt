@@ -1,0 +1,6 @@
+DB_NAME=Auralis
+DB_USER=root
+DB_PASSWORD=Daniel14586solis
+DB_HOST=34.135.82.255
+DB_PORT=3306
+SECRET_KEY=tu_secret_key_actual

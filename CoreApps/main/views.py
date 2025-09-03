@@ -17,7 +17,10 @@ from CoreApps.events.models import Alarm, Warning
 from django.http import JsonResponse
 
 from django.conf import settings
-from datetime import datetime
+from datetime import datetime, timedelta
+
+from django.utils import timezone
+
 
 class CustomLoginView(LoginView):
     template_name = 'main/login.html'
@@ -130,6 +133,7 @@ class DashboardMonitorView(LoginRequiredMixin, TemplateView):
         user = self.request.user
         #stations = Station.objects.filter(owner=user)
         stations = Station.objects.filter(related_users=user)
+        context['title']= "Monitor"
         context['stations'] = stations
         context['mqtt_broker_ip'] = settings.MQTT_BROKER_IP  # IP del broker
         context['mqtt_broker_port'] = settings.MQTT_BROKER_PORT  # Puerto del broker
@@ -147,6 +151,13 @@ class DashboardMonitorView(LoginRequiredMixin, TemplateView):
     #    return context
 
 
+def get_sensors_for_station(request, station_id):
+    sensors = Sensor.objects.filter(station_id=station_id, is_active=True)
+    sensor_list = list(sensors.values('id', 'name', 'sensor_type__unit'))
+    # El resultado sería un JSON como:
+    # [{"id": 1, "name": "Temperatura", "sensor_type__unit": "°C"}, {"id": 2, "name": "Humedad", "sensor_type__unit": "%"}]
+    return JsonResponse(sensor_list, safe=False)
+
 @login_required
 def get_station_sensors(request, station_id):
     """
@@ -156,9 +167,7 @@ def get_station_sensors(request, station_id):
     try:
         # Verificar que la estación pertenece al usuario actual
         #station = Station.objects.get(id=station_id, owner=request.user)
-        station = Station.objects.get(id=station_id, related_users=request.user)
-
-        
+        station = Station.objects.get(id=station_id, related_users=request.user)       
         # Obtener los sensores de la estación
         sensors = Sensor.objects.filter(station=station)
         
@@ -170,6 +179,8 @@ def get_station_sensors(request, station_id):
                 'name': sensor.name,
                 'unit': sensor.sensor_type.unit,  # Corregido: usar sensor_type.unit
                 'type': sensor.sensor_type.name,   # Corregido: usar sensor_type.name
+                'min_value': sensor.min_value,
+                'max_value': sensor.max_value,
             })
         
         return JsonResponse({
@@ -182,6 +193,49 @@ def get_station_sensors(request, station_id):
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
 
+@login_required
+def get_station_history(request, station_id):
+    # 1. Obtener el rango de tiempo desde los parámetros GET (ej: ?timescale=1h)
+    timescale = request.GET.get('timescale', '1m') # Por defecto 1 minuto
+
+    # 2. Calcular el tiempo de inicio basado en la escala
+    now = timezone.now()
+    if timescale == '1h':
+        start_time = now - timedelta(hours=1)
+    elif timescale == '6h':
+        start_time = now - timedelta(hours=6)
+    elif timescale == '12h':
+        start_time = now - timedelta(hours=12)
+    else: # Por defecto '1m' o 60 segundos
+        start_time = now - timedelta(minutes=1)
+
+    try:
+        # 3. Validar que el usuario tiene acceso a la estación
+        station = Station.objects.get(id=station_id, related_users=request.user)
+
+        # 4. Obtener las mediciones de TODOS los sensores de esa estación en el rango de tiempo
+        measurements = Measurement.objects.filter(
+            sensor__station=station,
+            timestamp__gte=start_time
+        ).order_by('timestamp').values('sensor_id', 'timestamp', 'value')
+
+        # 5. Formatear los datos para ECharts
+        history_data = {}
+        for m in measurements:
+            sensor_id = m['sensor_id']
+            if sensor_id not in history_data:
+                history_data[sensor_id] = []
+
+            # ECharts prefiere el formato [timestamp, value]
+            history_data[sensor_id].append([
+                m['timestamp'].isoformat(),
+                m['value']
+            ])
+
+        return JsonResponse(history_data)
+
+    except Station.DoesNotExist:
+        return JsonResponse({'error': 'Estación no encontrada'}, status=404)
 
 class DashboardSettingsView(LoginRequiredMixin, TemplateView):
     template_name = 'main/dashboard/settings.html'

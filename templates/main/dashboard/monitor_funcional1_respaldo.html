@@ -1,0 +1,364 @@
+{% extends 'main/dashboard.html' %}
+{% load static %}
+
+{% block fixedbar %}
+{# Este bloque ahora está vacío, como solicitaste #}
+{% endblock %}
+
+{% block content %}
+<div id="page-content">
+  <div class="row">
+
+    <div class="col-lg-3">
+      <div class="panel">
+        <div class="panel-heading">
+          <h3 class="panel-title">Controles</h3>
+        </div>
+        <div class="panel-body">
+          <div class="pad-all">
+            <span class="pad-ver text-main text-sm text-uppercase text-bold">SELECCIONE ESTACIÓN</span>
+            <div class="form-group">
+              <select id="station-selector" class="form-control">
+                <option value="">Seleccione una estación...</option>
+                {% for station in stations %}
+                <option value="{{ station.id }}">{{ station.name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="form-group">
+              <button id="load-sensors-btn" class="btn btn-primary btn-block">Consultar</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-9">
+      <div class="panel">
+        <div class="panel-heading">
+          <h3 class="panel-title" id="chart-panel-title">Monitor en Tiempo Real</h3>
+        </div>
+
+       <div class="panel-body">
+    <div style="display: flex; flex-direction: row; align-items: stretch;">
+        
+        <div id="multichart-container" style="flex-grow: 1; height: 75vh;"></div>
+        
+        <div id="value-panels-container" style="width: 180px; margin-left: 20px; display: flex; flex-direction: column; justify-content: space-around;">
+            </div>
+
+    </div>
+
+    <div id="placeholder-text" class="text-center" style="display: block;">
+        <h3 class="text-muted">Por favor, seleccione una estación y haga clic en "Consultar" para comenzar el monitoreo.</h3>
+    </div>
+</div>
+
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
+
+
+
+{% block script %}
+<!-- LIbrerías: Quitamos Chart.js y añadimos ECharts -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.4.3/echarts.min.js"></script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js" type="text/javascript"></script>
+
+
+
+<script>
+$(document).ready(function() {
+    
+    // =================================================================
+    // VARIABLES GLOBALES Y ELEMENTOS DEL DOM
+    // =================================================================
+    let myChart;
+    let sensorMetadata = {}; 
+    let mqttClient = null;
+    let currentSubscriptions = [];
+    let currentStationName = '';
+
+    const loadButton = $('#load-sensors-btn');
+    const stationSelector = $('#station-selector');
+    const chartContainer = document.getElementById('multichart-container');
+    const placeholderText = $('#placeholder-text');
+    const chartPanelTitle = $('#chart-panel-title');
+
+    // =================================================================
+    // INICIALIZACIÓN (Como en tu código funcional)
+    // =================================================================
+    console.log("Document ready, iniciando cliente MQTT...");
+    initMQTTClient();
+
+    if (!stationSelector.val()) {
+        loadButton.prop('disabled', true);
+    }
+    stationSelector.change(function() {
+        loadButton.prop('disabled', !$(this).val());
+    });
+    
+    // =================================================================
+    // EVENTO CLICK DEL BOTÓN
+    // =================================================================
+    loadButton.click(function() {
+        const stationId = stationSelector.val();
+        if (stationId) {
+            fetchAndRenderCharts(stationId);
+        }
+    });
+
+    // =================================================================
+    // FUNCIÓN PRINCIPAL PARA OBTENER DATOS Y RENDERIZAR
+    // =================================================================
+    function fetchAndRenderCharts(stationId) {
+        unsubscribeFromAllTopics();
+        
+        if (myChart) {
+            myChart.dispose();
+            myChart = null;
+        }
+        
+        placeholderText.hide();
+        chartContainer.style.display = 'block';
+        myChart = echarts.init(chartContainer);
+        myChart.showLoading();
+
+        $.ajax({
+            url: `/api/stations/${stationId}/sensors/`,
+            method: 'GET',
+            success: function(response) {
+                console.log('API Response:', response);
+                if (response.sensors && response.sensors.length > 0) {
+                    currentStationName = response.station_name;
+                    chartPanelTitle.text(`Monitor en Tiempo Real - ${currentStationName}`);
+                    
+                    sensorMetadata = {};
+                    response.sensors.forEach(s => {
+                        sensorMetadata[s.id] = s;
+                    });
+                    
+                    initializeMultiChart(response.sensors);
+                    
+                    response.sensors.forEach(sensor => {
+                        const topic = `${currentStationName}/${sensor.name}/`;
+                        subscribeToTopic(topic);
+                    });
+                } else {
+                    myChart.hideLoading();
+                    placeholderText.html('<h3 class="text-muted">No hay sensores disponibles para esta estación</h3>').show();
+                    chartContainer.style.display = 'none';
+                }
+            },
+            error: function(error) {
+                console.error("Error cargando sensores:", error);
+                myChart.hideLoading();
+                placeholderText.html(`<h3 class="text-danger">Error al cargar los sensores: ${error.statusText}</h3>`).show();
+                chartContainer.style.display = 'none';
+            }
+        });
+    }
+
+    // =================================================================
+    // FUNCIÓN PARA CREAR EL GRÁFICO ECHARTS
+    // =================================================================
+    function initializeMultiChart(sensors) {
+    const gridOptions = [];
+    const xAxisOptions = [];
+    const yAxisOptions = [];
+    const seriesOptions = [];
+    const totalSensors = sensors.length;
+    const chartHeight = 85 / totalSensors;
+
+    sensors.forEach((sensor, index) => {
+        gridOptions.push({ top: `${index * chartHeight + 10}%`, height: `${chartHeight - 8}%`, left: '10%', right: '5%' });
+        xAxisOptions.push({ gridIndex: index, type: 'time', axisLabel: { show: (index === totalSensors - 1) } });
+        yAxisOptions.push({ 
+            gridIndex: index, 
+            name: `${sensor.name}\n(${sensor.unit})`, 
+            nameLocation: 'middle', 
+            nameGap: 50, 
+            type: 'value',
+            min: sensor.min_value, 
+            max: sensor.max_value,
+            splitNumber: 4,
+
+            // ----- INICIO DE LA MODIFICACIÓN -----
+            axisLabel: {
+                formatter: function (value) {
+                    // Si el valor es cero, devolvemos '0'
+                    if (value === 0) {
+                        return '0';
+                    }
+                    // Para valores mayores o iguales a 1 millón
+                    if (Math.abs(value) >= 1000000) {
+                        return (value / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
+                    }
+                    // Para valores mayores o iguales a 1000
+                    if (Math.abs(value) >= 1000) {
+                        return (value / 1000).toFixed(1).replace(/\.0$/, '') + 'k';
+                    }
+                    // Para otros valores
+                    return value;
+                }
+            }
+            // ----- FIN DE LA MODIFICACIÓN -----
+        });
+        seriesOptions.push({
+            id: sensor.id,
+            name: sensor.name,
+            type: 'line',
+            showSymbol: false,
+            data: [],
+            xAxisIndex: index,
+            yAxisIndex: index,
+            lineStyle: { width: 2 }
+        });
+    });
+
+    const option = {
+        tooltip: { trigger: 'axis', axisPointer: { animation: false } },
+        axisPointer: { link: [{ xAxisIndex: 'all' }] },
+        grid: gridOptions,
+        xAxis: xAxisOptions,
+        yAxis: yAxisOptions,
+        series: seriesOptions,
+        dataZoom: [{ type: 'slider', xAxisIndex: Array.from(Array(totalSensors).keys()), start: 0, end: 100, bottom: '0%', height: 25 }],
+    };
+
+    myChart.hideLoading();
+    myChart.setOption(option, true);
+    console.log("Gráfico ECharts inicializado con éxito y etiquetas del eje Y formateadas.");
+}
+
+    // =================================================================
+    // LÓGICA MQTT - USANDO TU CÓDIGO FUNCIONAL
+    // =================================================================
+    function initMQTTClient() {
+        const clientId = "auralis_dashboard_" + Math.random().toString(16).substr(2, 8);
+        console.log("Inicializando cliente MQTT con ID:", clientId);
+        try {
+            // CORRECCIÓN CLAVE: Usamos la instanciación de tu código original
+            mqttClient = new Paho.MQTT.Client(
+                "{{ mqtt_broker_ip }}",
+                Number("{{ mqtt_broker_port }}"),
+                "/", // Path correcto de tu broker
+                clientId
+            );
+            
+            mqttClient.onConnectionLost = onConnectionLost;
+            mqttClient.onMessageArrived = onMessageArrived;
+            
+            mqttClient.connect({
+                onSuccess: onConnect,
+                onFailure: function(e) {
+                    console.error("Conexión MQTT fallida:", e);
+                },
+                useSSL: false,
+                keepAliveInterval: 60
+            });
+        } catch (e) {
+            console.error("Error creando cliente MQTT:", e);
+        }
+    }
+
+    function subscribeToTopic(topic) {
+        // CORRECCIÓN: Usamos tu lógica de suscripción que es más robusta
+        if (mqttClient && mqttClient.isConnected()) {
+            mqttClient.subscribe(topic);
+            currentSubscriptions.push(topic);
+            console.log(`Suscrito a ${topic}`);
+        } else {
+            console.warn(`Cliente MQTT no conectado. Se intentará suscribir a ${topic} cuando la conexión se establezca.`);
+            // Si no está conectado, la función onConnect se encargará de reintentar la suscripción.
+            if (!currentSubscriptions.includes(topic)) {
+                currentSubscriptions.push(topic);
+            }
+        }
+    }
+
+    function onConnect() {
+        console.log("MQTT Conectado.");
+        // Reintentar suscripciones pendientes si las hay
+        if (currentSubscriptions.length > 0) {
+            console.log("Procesando suscripciones pendientes...");
+            currentSubscriptions.forEach(topic => {
+                if (mqttClient && mqttClient.isConnected()) {
+                    mqttClient.subscribe(topic);
+                    console.log(`Suscrito (pendiente) a ${topic}`);
+                }
+            });
+        }
+    }
+    
+    function onConnectionLost(responseObject) {
+        if (responseObject.errorCode !== 0) {
+            console.log("Conexión MQTT perdida:", responseObject.errorMessage);
+            setTimeout(initMQTTClient, 5000);
+        }
+    }
+
+    function onMessageArrived(message) {
+        const topic = message.destinationName;
+        const payload = message.payloadString;
+        const topicParts = topic.slice(0, -1).split('/');
+        
+        if (topicParts.length < 2 || topicParts[0] !== currentStationName) return;
+        
+        const sensorName = topicParts[1];
+        const sensor = Object.values(sensorMetadata).find(s => s.name === sensorName);
+        if (!sensor) return;
+
+        try {
+            const value = parseFloat(payload);
+            updateChartData(sensor.id, value);
+        } catch (e) {
+            console.error(`Error al procesar el payload de MQTT [${topic}]:`, e);
+        }
+    }
+    
+    function updateChartData(sensorId, value) {
+        if (!myChart) return;
+        let option = myChart.getOption();
+        if (!option || !option.series) return;
+        
+        let seriesIndex = option.series.findIndex(s => s.id === sensorId);
+        
+        if (seriesIndex !== -1) {
+            let dataArray = option.series[seriesIndex].data;
+            dataArray.push([new Date(), value]);
+            
+            if (dataArray.length > 60) {
+                dataArray.shift();
+            }
+            
+            myChart.setOption({
+                series: [{ id: sensorId, data: dataArray }]
+            });
+        }
+    }
+
+    function unsubscribeFromAllTopics() {
+        if (mqttClient && mqttClient.isConnected()) {
+            currentSubscriptions.forEach(topic => mqttClient.unsubscribe(topic));
+            console.log("Desuscrito de todos los tópicos anteriores.");
+        }
+        currentSubscriptions = [];
+    }
+
+    window.addEventListener('resize', function() {
+        if (myChart) {
+            myChart.resize();
+        }
+    });
+});
+</script>
+
+
+
+{% endblock %}
+

@@ -60,32 +60,6 @@
 </div>
 <!--===================================================-->
 <!--End page content-->
-
-<style>
-/* Estilos para la vista de monitoreo */
-.sensor-row {
-    display: flex;
-    flex-direction: row; /* Por defecto, en fila */
-    border-bottom: 1px solid #f0f0f0;
-    margin-bottom: 15px;
-    padding-bottom: 15px;
-}
-/* Media Query para pantallas pequeñas (móviles) */
-@media (max-width: 768px) {
-    .sensor-row {
-        flex-direction: column; /* Cambia a columna en móviles */
-        height: auto !important; /* La altura se ajusta al contenido */
-    }
-    .sensor-row > div:first-child { /* El contenedor del gráfico */
-        height: 200px; /* Le damos una altura fija en móvil */
-    }
-    .sensor-row > div:last-child { /* El panel de valor */
-        width: 100% !important;
-        margin-left: 0 !important;
-        margin-top: 15px;
-    }
-}
-</style>
 {% endblock %}
 
 
@@ -102,7 +76,10 @@ $(document).ready(function() {
     // =================================================================
     // VARIABLES GLOBALES Y ELEMENTOS DEL DOM
     // =================================================================
+    
+    // CORRECCIÓN CLAVE: La variable se llama 'charts' (plural) y es un objeto.
     let charts = {}; 
+    
     let sensorMetadata = {}; 
     let mqttClient = null;
     let currentSubscriptions = [];
@@ -115,7 +92,7 @@ $(document).ready(function() {
     const chartPanelTitle = $('#chart-panel-title');
 
     // =================================================================
-    // INICIALIZACIÓN DE MQTT (Tu código funcional)
+    // 1. INICIALIZACIÓN DE MQTT (Tu código funcional)
     // =================================================================
     console.log("Document ready, inicializando cliente MQTT...");
     initMQTTClient();
@@ -138,10 +115,11 @@ $(document).ready(function() {
     });
 
     // =================================================================
-    // LÓGICA MQTT (Funciones de tu script original)
+    // LÓGICA MQTT (Funciones de tu script original que ya funcionan)
     // =================================================================
     function initMQTTClient() {
         const clientId = "auralis_dashboard_" + Math.random().toString(16).substr(2, 8);
+        console.log("Inicializando cliente MQTT con ID:", clientId);
         try {
             mqttClient = new Paho.MQTT.Client(
                 "{{ mqtt_broker_ip }}",
@@ -198,131 +176,133 @@ $(document).ready(function() {
     // =================================================================
     // FUNCIÓN PRINCIPAL PARA OBTENER DATOS Y RENDERIZAR
     // =================================================================
+    
     function fetchAndRenderCharts(stationId) {
-        unsubscribeFromAllTopics();
-        
-        Object.values(charts).forEach(chart => chart.dispose());
-        charts = {};
+    unsubscribeFromAllTopics();
+    
+    Object.values(charts).forEach(chart => chart.dispose());
+    charts = {};
 
-        placeholderText.hide();
-        displayArea.empty().show();
-        displayArea.append('<div class="text-center" id="loading-spinner"><i class="fa fa-spinner fa-spin fa-3x"></i><p>Cargando sensores...</p></div>');
+    const displayArea = $('#sensors-display-area');
+    const placeholder = $('#placeholder-text');
+    
+    placeholder.hide();
+    displayArea.empty().show();
+    displayArea.append('<div class="text-center" id="loading-spinner"><i class="fa fa-spinner fa-spin fa-3x"></i><p>Cargando sensores...</p></div>');
 
-        $.ajax({
-            url: `/api/stations/${stationId}/sensors/`,
-            method: 'GET',
-            success: function(response) {
-                $('#loading-spinner').remove();
+    $.ajax({
+        url: `/api/stations/${stationId}/sensors/`,
+        method: 'GET',
+        success: function(response) {
+            $('#loading-spinner').remove();
+            
+            if (response.sensors && response.sensors.length > 0) {
+                currentStationName = response.station_name;
+                chartPanelTitle.text(`Monitor en Tiempo Real - ${currentStationName}`);
                 
-                if (response.sensors && response.sensors.length > 0) {
-                    currentStationName = response.station_name;
-                    chartPanelTitle.text(`Monitor en Tiempo Real - ${currentStationName}`);
-                    
-                    sensorMetadata = {};
-                    const containerHeight = displayArea.height();
-                    const totalSensors = response.sensors.length;
-                    const rowHeight = (containerHeight / totalSensors) - 5;
+                sensorMetadata = {};
 
-                    response.sensors.forEach(s => {
-                        sensorMetadata[s.id] = s;
+                // ----- INICIO DE LA MODIFICACIÓN -----
+                // Calcular la altura para cada fila de sensor
+                const containerHeight = displayArea.height();
+                const totalSensors = response.sensors.length;
+                // Dejamos un pequeño margen para que no se vea tan apretado
+                const rowHeight = (containerHeight / totalSensors) - 5; 
+                // ----- FIN DE LA MODIFICACIÓN -----
 
-                        const sensorRowHtml = `
-                            <div class="row sensor-row" style="height: ${rowHeight}px;">
-                                <div class="col-md-9" id="chart-container-${s.id}" style="height: 100%;"></div>
-                                <div class="col-md-3" style="text-align: center; display: flex; flex-direction: column; justify-content: center; height: 100%;">
-                                    <h5 style="margin-bottom: 0; font-weight: bold;">${s.name}</h5>
-                                    <h3 id="value-display-${s.id}" style="margin: 0; font-size: 2em; font-weight: 300;">--</h3>
-                                    <p style="margin-top: 0;">${s.unit}</p>
-                                </div>
+                response.sensors.forEach(s => {
+                    sensorMetadata[s.id] = s;
+
+                    // Aplicamos la altura calculada a cada fila
+                    const sensorRowHtml = `
+                        <div class="row" style="height: ${rowHeight}px; border-bottom: 1px solid #f0f0f0; padding: 2px 0;">
+                            <div class="col-md-9" id="chart-container-${s.id}" style="height: 100%;"></div>
+                            <div class="col-md-3" style="text-align: center; display: flex; flex-direction: column; justify-content: center; height: 100%;">
+                                <h5 style="margin-bottom: 0; font-weight: bold;">${s.name}</h5>
+                                <h3 id="value-display-${s.id}" style="margin: 0; font-size: 2em; font-weight: 300;">--</h3>
+                                <p style="margin-top: 0;">${s.unit}</p>
                             </div>
-                        `;
-                        displayArea.append(sensorRowHtml);
-                    });
+                        </div>
+                    `;
+                    displayArea.append(sensorRowHtml);
+                });
 
-                    initializeAllCharts(response.sensors, rowHeight);
-                    
-                    response.sensors.forEach(sensor => {
-                        const topic = `${currentStationName}/${sensor.name}/`;
-                        subscribeToTopic(topic);
-                    });
+                // Pasamos la altura calculada a la función que inicializa los gráficos
+                initializeAllCharts(response.sensors, rowHeight);
+                
+                response.sensors.forEach(sensor => {
+                    const topic = `${currentStationName}/${sensor.name}/`;
+                    subscribeToTopic(topic);
+                });
 
-                } else {
-                    placeholderText.html('<h3 class="text-muted">No hay sensores disponibles para esta estación</h3>').show();
-                    displayArea.hide();
-                }
-            },
-            error: function(error) {
-                $('#loading-spinner').remove();
-                placeholderText.html(`<h3 class="text-danger">Error al cargar los sensores: ${error.statusText}</h3>`).show();
+            } else {
+                placeholder.html('<h3 class="text-muted">No hay sensores disponibles para esta estación</h3>').show();
                 displayArea.hide();
             }
-        });
-    }
+        },
+        error: function(error) {
+            $('#loading-spinner').remove();
+            placeholder.html(`<h3 class="text-danger">Error al cargar los sensores: ${error.statusText}</h3>`).show();
+            displayArea.hide();
+        }
+    });
+}
 
     // =================================================================
     // LÓGICA DE ECHARTS
     // =================================================================
     function initializeAllCharts(sensors, rowHeight) {
-        const colorPalette = ['#5470C6', '#91CC75', '#FAC858', '#EE6666', '#73C0DE', '#3BA272', '#FC8452', '#9A60B4', '#EA7CCC'];
-        let chartInstances = [];
-        
-        // CORRECCIÓN: Definimos totalSensors aquí, donde se necesita.
-        const totalSensors = sensors.length;
+    const chartGroupId = 'station_group_' + new Date().getTime();
+    
+    // ----- INICIO DE LA MODIFICACIÓN -----
+    // Ajustes adaptativos basados en la altura disponible
+    let isCompact = rowHeight < 110;
+    let gridSettings = isCompact 
+        ? { left: '12%', right: '5%', top: '20%', bottom: '22%' } // Márgenes más ajustados para gráficos pequeños
+        : { left: '12%', right: '5%', top: '15%', bottom: '15%' }; // Márgenes normales
+    let nameGapSetting = isCompact ? 40 : 55; // Menos espacio para el nombre del eje si es compacto
+    // ----- FIN DE LA MODIFICACIÓN -----
 
-        let isCompact = rowHeight < 110;
-        let gridSettings = isCompact 
-            ? { left: '15%', right: '5%', top: '15%', bottom: '20%' }
-            : { left: '12%', right: '5%', top: '10%', bottom: '15%' };
-        let nameTextStyle = isCompact
-            ? { fontSize: 10 }
-            : { fontSize: 12 };
-
-        sensors.forEach((sensor, index) => {
-            const chartDom = document.getElementById(`chart-container-${sensor.id}`);
-            if (chartDom) {
-                const chart = echarts.init(chartDom);
-                
-                const option = {
-                    tooltip: { trigger: 'axis', axisPointer: { animation: false } },
-                    grid: gridSettings,
-                    xAxis: { type: 'time', axisLabel: { show: (index === totalSensors - 1) || isCompact } },
-                    yAxis: { 
-                        name: sensor.name, 
-                        nameLocation: 'middle', 
-                        nameGap: 55,
-                        nameTextStyle: nameTextStyle,
-                        type: 'value',
-                        min: sensor.min_value, max: sensor.max_value,
-                        splitNumber: 4,
-                        axisLabel: {
-                            formatter: function (value) {
-                                if (value === 0) return '0';
-                                if (Math.abs(value) >= 1000) return (value / 1000).toFixed(1).replace(/\.0$/, '') + 'k';
-                                return value;
-                            }
+    sensors.forEach(sensor => {
+        const chartDom = document.getElementById(`chart-container-${sensor.id}`);
+        if (chartDom) {
+            const chart = echarts.init(chartDom);
+            
+            const option = {
+                group: chartGroupId,
+                tooltip: { trigger: 'axis', axisPointer: { animation: false } },
+                grid: gridSettings, // Usamos los márgenes adaptativos
+                xAxis: { type: 'time' },
+                yAxis: { 
+                    name: `${sensor.name}\n(${sensor.unit})`, 
+                    nameLocation: 'middle', 
+                    nameGap: nameGapSetting, // Usamos el espaciado adaptativo
+                    type: 'value',
+                    min: sensor.min_value, max: sensor.max_value,
+                    splitNumber: 4,
+                    axisLabel: {
+                        formatter: function (value) {
+                            if (value === 0) return '0';
+                            if (Math.abs(value) >= 1000000) return (value / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
+                            if (Math.abs(value) >= 1000) return (value / 1000).toFixed(1).replace(/\.0$/, '') + 'k';
+                            return value;
                         }
-                    },
-                    series: [{
-                        id: sensor.id, name: sensor.name, type: 'line', showSymbol: false,
-                        data: [],
-                        lineStyle: { width: 2, color: colorPalette[index % colorPalette.length] },
-                        itemStyle: { color: colorPalette[index % colorPalette.length] }
-                    }],
-                };
+                    }
+                },
+                series: [{
+                    id: sensor.id, name: sensor.name, type: 'line', showSymbol: false,
+                    data: [], lineStyle: { width: 2 }
+                }],
+            };
 
-                chart.setOption(option);
-                charts[sensor.id] = chart;
-                chartInstances.push(chart);
-            }
-        });
-        
-        // Reintroducimos echarts.connect, que ahora debería funcionar.
-        if (chartInstances.length > 1) {
-            echarts.connect(chartInstances);
+            chart.setOption(option);
+            charts[sensor.id] = chart;
+        } else {
+            console.error(`No se encontró el contenedor del gráfico para el sensor con ID: ${sensor.id}`);
         }
-        
-        console.log("Todos los gráficos individuales han sido inicializados y conectados.");
-    }
+    });
+    console.log("Todos los gráficos individuales han sido inicializados y asignados al grupo:", chartGroupId);
+}
     
     function onMessageArrived(message) {
         const topic = message.destinationName;
@@ -344,15 +324,13 @@ $(document).ready(function() {
     }
     
     function updateChartData(sensorId, value) {
+        // Actualizar el panel de valor numérico
         $(`#value-display-${sensorId}`).text(value.toFixed(2));
 
         const chart = charts[sensorId];
         if (!chart) return;
 
         let option = chart.getOption();
-        // Verificación de seguridad para evitar errores si la opción no está lista
-        if (!option || !option.series || option.series.length === 0) return;
-        
         let dataArray = option.series[0].data;
         
         dataArray.push([new Date(), value]);
@@ -366,11 +344,7 @@ $(document).ready(function() {
     }
 
     window.addEventListener('resize', function() { 
-        Object.values(charts).forEach(chart => {
-            if (chart && !chart.isDisposed()) {
-                chart.resize();
-            }
-        });
+        Object.values(charts).forEach(chart => chart.resize());
     });
 });
 </script>

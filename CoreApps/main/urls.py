@@ -9,7 +9,7 @@ from .views import (
     DashboardMapView, DashboardMonitorView, 
     DashboardSettingsView, DashboardSupportView,
     StationDataView, DataHistoryView, DataReportView,
-    get_station_sensors, get_station_data, get_station_history  # Asegúrate de importar esta función también
+    get_station_sensors, get_station_data, get_station_history, StationLocationsView  # Asegúrate de importar esta función también
 )
 
 # Elimina esta línea redundante
@@ -22,6 +22,7 @@ urlpatterns = [
     path('logout/', LogoutView.as_view(next_page='login'), name='logout'),
     path('dashboard/', DashboardView.as_view(), name='dashboard'),
     path('dashboard/map/', DashboardMapView.as_view(), name='dashboard-map'),
+    path('api/map/stations/', StationLocationsView.as_view(), name='api-map-stations'),
     path('dashboard/station-data/', StationDataView.as_view(), name='dashboard-station-data'),
     path('api/station-data/', get_station_data, name='get_station_data'),
     path('dashboard/data-history/', DataHistoryView.as_view(), name='dashboard-data-history'),

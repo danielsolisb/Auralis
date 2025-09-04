@@ -16,6 +16,8 @@ TOPIC_PCASING = "Sacha53/PCasing/"
 TOPIC_PTUBING = "Sacha53/Ptubing/"
 TOPIC_FRECUENCY = "Sacha53/VSDTargetFreq/"
 TOPIC_PRESSUREINTAKE = "Sacha53/DHIntakePressure/" 
+TOPIC_TEMP_MOT = "Sacha53/DHMotorTemp/" 
+TOPIC_AMPER = "Sacha53/Amperimetro/" 
 
 
 PUBLISH_INTERVAL_SEC = 3
@@ -56,6 +58,13 @@ def gen_frecuency():
     # 0 .. 300 (con dos decimales)
     return f"{random.uniform(0, 100):.2f}"
 
+def gen_temp():
+    # 0 .. 300 (con dos decimales)
+    return f"{random.uniform(0, 100):.2f}"
+def gen_amper():
+    # 0 .. 300 (con dos decimales)
+    return f"{random.uniform(0, 60):.2f}"
+
 def main():
     # Cliente MQTT
     client = mqtt.Client(transport="websockets" if USE_WEBSOCKET else "tcp")
@@ -79,6 +88,9 @@ def main():
         print(f"  - {TOPIC_PTUBING}  (0..300)")
         print(f"  - {TOPIC_FRECUENCY}  (0..300)")
         print(f"  - {TOPIC_PRESSUREINTAKE}  (0..300)")
+        print(f"  - {TOPIC_TEMP_MOT}  (0..100)")
+        print(f"  - {TOPIC_AMPER}  (0..60)")
+
 
         while True:
             flow_val    = gen_flow()
@@ -86,6 +98,8 @@ def main():
             tubing_val  = gen_pressure()
             frecuency_val = gen_frecuency()
             pressureintake_val = gen_pressure2()
+            temp_mot_val = gen_temp()
+            amper_val = gen_amper()
 
 
             # Publicar como payloads simples (números en texto)
@@ -94,6 +108,9 @@ def main():
             client.publish(TOPIC_PTUBING, tubing_val, qos=QOS, retain=RETAIN)
             client.publish(TOPIC_FRECUENCY, frecuency_val, qos=QOS, retain=RETAIN)
             client.publish(TOPIC_PRESSUREINTAKE, pressureintake_val, qos=QOS, retain=RETAIN)
+            client.publish(TOPIC_TEMP_MOT, temp_mot_val, qos=QOS, retain=RETAIN)
+            client.publish(TOPIC_AMPER, amper_val, qos=QOS, retain=RETAIN)
+
 
 
             print(f"[{ts()}] TX  {TOPIC_FLOW}    -> {flow_val}")
@@ -101,6 +118,9 @@ def main():
             print(f"[{ts()}] TX  {TOPIC_PTUBING} -> {tubing_val}")
             print(f"[{ts()}] TX  {TOPIC_FRECUENCY} -> {gen_pressure()}")
             print(f"[{ts()}] TX  {TOPIC_PRESSUREINTAKE} -> {gen_pressure()}")
+            print(f"[{ts()}] TX  {TOPIC_TEMP_MOT} -> {gen_temp()}")
+            print(f"[{ts()}] TX  {TOPIC_AMPER} -> {gen_amper()}")
+
 
 
             time.sleep(PUBLISH_INTERVAL_SEC)

@@ -1,0 +1,378 @@
+{% extends 'main/dashboard.html' %}
+{% load static %}
+
+{% block fixedbar %}
+{# Este bloque ahora está vacío, como solicitaste #}
+{% endblock %}
+
+{% block content %}
+<!--Page content-->
+<!--===================================================-->
+<div id="page-content">
+  <div class="row">
+
+    <!-- Columna para los Controles (Izquierda) -->
+    <div class="col-lg-3">
+      <div class="panel">
+        <div class="panel-heading">
+          <h3 class="panel-title">Controles</h3>
+        </div>
+        <div class="panel-body">
+          <div class="pad-all">
+            <span class="pad-ver text-main text-sm text-uppercase text-bold">SELECCIONE ESTACIÓN</span>
+            <div class="form-group">
+              <select id="station-selector" class="form-control">
+                <option value="">Seleccione una estación...</option>
+                {% for station in stations %}
+                <option value="{{ station.id }}">{{ station.name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="form-group">
+              <button id="load-sensors-btn" class="btn btn-primary btn-block">Consultar</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Columna para los Gráficos (Derecha) -->
+    <div class="col-lg-9">
+      <div class="panel">
+        <div class="panel-heading">
+          <h3 class="panel-title" id="chart-panel-title">Monitor en Tiempo Real</h3>
+        </div>
+        <div class="panel-body">
+          <!-- Contenedor principal que será scrollable -->
+          <div id="sensors-display-area" style="height: 75vh; overflow-y: auto; overflow-x: hidden;">
+            <!-- Las filas de sensores (gráfico + valor) se insertarán aquí -->
+          </div>
+          
+          <!-- Mensaje de placeholder -->
+          <div id="placeholder-text" class="text-center" style="height: 75vh; display: flex; align-items: center; justify-content: center;">
+            <h3 class="text-muted">Por favor, seleccione una estación y haga clic en "Consultar".</h3>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+<!--===================================================-->
+<!--End page content-->
+
+<style>
+/* Estilos para la vista de monitoreo */
+.sensor-row {
+    display: flex;
+    flex-direction: row; /* Por defecto, en fila */
+    border-bottom: 1px solid #f0f0f0;
+    margin-bottom: 15px;
+    padding-bottom: 15px;
+}
+/* Media Query para pantallas pequeñas (móviles) */
+@media (max-width: 768px) {
+    .sensor-row {
+        flex-direction: column; /* Cambia a columna en móviles */
+        height: auto !important; /* La altura se ajusta al contenido */
+    }
+    .sensor-row > div:first-child { /* El contenedor del gráfico */
+        height: 200px; /* Le damos una altura fija en móvil */
+    }
+    .sensor-row > div:last-child { /* El panel de valor */
+        width: 100% !important;
+        margin-left: 0 !important;
+        margin-top: 15px;
+    }
+}
+</style>
+{% endblock %}
+
+
+
+{% block script %}
+<!-- LIbrerías: Quitamos Chart.js y añadimos ECharts -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.4.3/echarts.min.js"></script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js" type="text/javascript"></script>
+
+<script>
+$(document).ready(function() {
+    
+    // =================================================================
+    // VARIABLES GLOBALES Y ELEMENTOS DEL DOM
+    // =================================================================
+    let charts = {}; 
+    let sensorMetadata = {}; 
+    let mqttClient = null;
+    let currentSubscriptions = [];
+    let currentStationName = '';
+
+    const loadButton = $('#load-sensors-btn');
+    const stationSelector = $('#station-selector');
+    const displayArea = $('#sensors-display-area');
+    const placeholderText = $('#placeholder-text');
+    const chartPanelTitle = $('#chart-panel-title');
+
+    // =================================================================
+    // INICIALIZACIÓN DE MQTT (Tu código funcional)
+    // =================================================================
+    console.log("Document ready, inicializando cliente MQTT...");
+    initMQTTClient();
+
+    if (!stationSelector.val()) {
+        loadButton.prop('disabled', true);
+    }
+    stationSelector.change(function() {
+        loadButton.prop('disabled', !$(this).val());
+    });
+    
+    // =================================================================
+    // EVENTO CLICK DEL BOTÓN
+    // =================================================================
+    loadButton.click(function() {
+        const stationId = stationSelector.val();
+        if (stationId) {
+            fetchAndRenderCharts(stationId);
+        }
+    });
+
+    // =================================================================
+    // LÓGICA MQTT (Funciones de tu script original)
+    // =================================================================
+    function initMQTTClient() {
+        const clientId = "auralis_dashboard_" + Math.random().toString(16).substr(2, 8);
+        try {
+            mqttClient = new Paho.MQTT.Client(
+                "{{ mqtt_broker_ip }}",
+                Number("{{ mqtt_broker_port }}"),
+                "/",
+                clientId
+            );
+            
+            mqttClient.onConnectionLost = onConnectionLost;
+            mqttClient.onMessageArrived = onMessageArrived;
+            
+            mqttClient.connect({
+                onSuccess: onConnect,
+                onFailure: function(e) { console.error("Conexión MQTT fallida:", e); },
+                useSSL: false,
+                keepAliveInterval: 60
+            });
+        } catch (e) {
+            console.error("Error creando cliente MQTT:", e);
+        }
+    }
+
+    function onConnect() {
+        console.log("MQTT Conectado");
+    }
+
+    function onConnectionLost(responseObject) {
+        if (responseObject.errorCode !== 0) {
+            console.log("Conexión MQTT perdida:", responseObject.errorMessage);
+            setTimeout(initMQTTClient, 5000);
+        }
+    }
+
+    function subscribeToTopic(topic) {
+        if (mqttClient && mqttClient.isConnected()) {
+            mqttClient.subscribe(topic);
+            currentSubscriptions.push(topic);
+            console.log(`Suscrito a ${topic}`);
+        } else {
+            console.warn(`No se pudo suscribir a ${topic} - Cliente MQTT no conectado`);
+        }
+    }
+    
+    function unsubscribeFromAllTopics() {
+        if (mqttClient && mqttClient.isConnected()) {
+            currentSubscriptions.forEach(topic => {
+                mqttClient.unsubscribe(topic);
+                console.log(`Desuscrito de ${topic}`);
+            });
+        }
+        currentSubscriptions = [];
+    }
+
+    // =================================================================
+    // FUNCIÓN PRINCIPAL PARA OBTENER DATOS Y RENDERIZAR
+    // =================================================================
+    function fetchAndRenderCharts(stationId) {
+        unsubscribeFromAllTopics();
+        
+        Object.values(charts).forEach(chart => chart.dispose());
+        charts = {};
+
+        placeholderText.hide();
+        displayArea.empty().show();
+        displayArea.append('<div class="text-center" id="loading-spinner"><i class="fa fa-spinner fa-spin fa-3x"></i><p>Cargando sensores...</p></div>');
+
+        $.ajax({
+            url: `/api/stations/${stationId}/sensors/`,
+            method: 'GET',
+            success: function(response) {
+                $('#loading-spinner').remove();
+                
+                if (response.sensors && response.sensors.length > 0) {
+                    currentStationName = response.station_name;
+                    chartPanelTitle.text(`Monitor en Tiempo Real - ${currentStationName}`);
+                    
+                    sensorMetadata = {};
+                    const containerHeight = displayArea.height();
+                    const totalSensors = response.sensors.length;
+                    const rowHeight = (containerHeight / totalSensors) - 5;
+
+                    response.sensors.forEach(s => {
+                        sensorMetadata[s.id] = s;
+
+                        const sensorRowHtml = `
+                            <div class="row sensor-row" style="height: ${rowHeight}px;">
+                                <div class="col-md-9" id="chart-container-${s.id}" style="height: 100%;"></div>
+                                <div class="col-md-3" style="text-align: center; display: flex; flex-direction: column; justify-content: center; height: 100%;">
+                                    <h5 style="margin-bottom: 0; font-weight: bold;">${s.name}</h5>
+                                    <h3 id="value-display-${s.id}" style="margin: 0; font-size: 2em; font-weight: 300;">--</h3>
+                                    <p style="margin-top: 0;">${s.unit}</p>
+                                </div>
+                            </div>
+                        `;
+                        displayArea.append(sensorRowHtml);
+                    });
+
+                    initializeAllCharts(response.sensors, rowHeight);
+                    
+                    response.sensors.forEach(sensor => {
+                        const topic = `${currentStationName}/${sensor.name}/`;
+                        subscribeToTopic(topic);
+                    });
+
+                } else {
+                    placeholderText.html('<h3 class="text-muted">No hay sensores disponibles para esta estación</h3>').show();
+                    displayArea.hide();
+                }
+            },
+            error: function(error) {
+                $('#loading-spinner').remove();
+                placeholderText.html(`<h3 class="text-danger">Error al cargar los sensores: ${error.statusText}</h3>`).show();
+                displayArea.hide();
+            }
+        });
+    }
+
+    // =================================================================
+    // LÓGICA DE ECHARTS
+    // =================================================================
+    function initializeAllCharts(sensors, rowHeight) {
+        const colorPalette = ['#5470C6', '#91CC75', '#FAC858', '#EE6666', '#73C0DE', '#3BA272', '#FC8452', '#9A60B4', '#EA7CCC'];
+        let chartInstances = [];
+        
+        // CORRECCIÓN: Definimos totalSensors aquí, donde se necesita.
+        const totalSensors = sensors.length;
+
+        let isCompact = rowHeight < 110;
+        let gridSettings = isCompact 
+            ? { left: '15%', right: '5%', top: '15%', bottom: '20%' }
+            : { left: '12%', right: '5%', top: '10%', bottom: '15%' };
+        let nameTextStyle = isCompact
+            ? { fontSize: 10 }
+            : { fontSize: 12 };
+
+        sensors.forEach((sensor, index) => {
+            const chartDom = document.getElementById(`chart-container-${sensor.id}`);
+            if (chartDom) {
+                const chart = echarts.init(chartDom);
+                
+                const option = {
+                    tooltip: { trigger: 'axis', axisPointer: { animation: false } },
+                    grid: gridSettings,
+                    xAxis: { type: 'time', axisLabel: { show: (index === totalSensors - 1) || isCompact } },
+                    yAxis: { 
+                        name: sensor.name, 
+                        nameLocation: 'middle', 
+                        nameGap: 55,
+                        nameTextStyle: nameTextStyle,
+                        type: 'value',
+                        min: sensor.min_value, max: sensor.max_value,
+                        splitNumber: 4,
+                        axisLabel: {
+                            formatter: function (value) {
+                                if (value === 0) return '0';
+                                if (Math.abs(value) >= 1000) return (value / 1000).toFixed(1).replace(/\.0$/, '') + 'k';
+                                return value;
+                            }
+                        }
+                    },
+                    series: [{
+                        id: sensor.id, name: sensor.name, type: 'line', showSymbol: false,
+                        data: [],
+                        lineStyle: { width: 2, color: colorPalette[index % colorPalette.length] },
+                        itemStyle: { color: colorPalette[index % colorPalette.length] }
+                    }],
+                };
+
+                chart.setOption(option);
+                charts[sensor.id] = chart;
+                chartInstances.push(chart);
+            }
+        });
+        
+        // Reintroducimos echarts.connect, que ahora debería funcionar.
+        if (chartInstances.length > 1) {
+            echarts.connect(chartInstances);
+        }
+        
+        console.log("Todos los gráficos individuales han sido inicializados y conectados.");
+    }
+    
+    function onMessageArrived(message) {
+        const topic = message.destinationName;
+        const payload = message.payloadString;
+        const topicParts = topic.slice(0, -1).split('/');
+        
+        if (topicParts.length < 2 || topicParts[0] !== currentStationName) return;
+        
+        const sensorName = topicParts[1];
+        const sensor = Object.values(sensorMetadata).find(s => s.name === sensorName);
+        if (!sensor) return;
+
+        try {
+            const value = parseFloat(payload);
+            updateChartData(sensor.id, value);
+        } catch (e) {
+            console.error(`Error procesando payload [${topic}]:`, e);
+        }
+    }
+    
+    function updateChartData(sensorId, value) {
+        $(`#value-display-${sensorId}`).text(value.toFixed(2));
+
+        const chart = charts[sensorId];
+        if (!chart) return;
+
+        let option = chart.getOption();
+        // Verificación de seguridad para evitar errores si la opción no está lista
+        if (!option || !option.series || option.series.length === 0) return;
+        
+        let dataArray = option.series[0].data;
+        
+        dataArray.push([new Date(), value]);
+        if (dataArray.length > 60) {
+            dataArray.shift();
+        }
+        
+        chart.setOption({
+            series: [{ id: sensorId, data: dataArray }]
+        });
+    }
+
+    window.addEventListener('resize', function() { 
+        Object.values(charts).forEach(chart => {
+            if (chart && !chart.isDisposed()) {
+                chart.resize();
+            }
+        });
+    });
+});
+</script>
+{% endblock %}
+

@@ -3,16 +3,207 @@
 
 {% block content %}
 <!--Page content-->
-<!--===================================================-->
 <div id="page-content">
-  <!--Activated Users Chart-->
-  <!--===================================================-->
   <div class="panel">
-    <div class="panel-body"></div>
+    <div class="panel-heading">
+      <h3 class="panel-title">Mapa de estaciones</h3>
+    </div>
+    <div class="panel-body">
+      <!-- Contenedor del mapa -->
+      <div id="map" style="width:100%; height: calc(100vh - 220px);"></div>
+
+      <!-- Placeholder si necesitas mensajes -->
+      <div id="map-placeholder" class="text-center" style="display:none; padding:2rem;">
+        <h4 class="text-muted">No hay estaciones con coordenadas disponibles.</h4>
+      </div>
+    </div>
   </div>
-  <!--===================================================-->
-  <!--End Activated Users chart-->
 </div>
-<!--===================================================-->
-<!--End page content-->
+
+<!-- Estilos responsive del mapa -->
+<style>
+  /* Altura del mapa: +más vertical */
+  #map{ width:100%; height: calc(100vh - 140px); }
+  @media (max-width: 992px){
+    #map{ height: calc(100vh - 180px); }
+  }
+  @media (max-width: 576px){
+    #map{ height: 65vh; }
+  }
+
+  /* ===== Tamaño y estilo del POPUP (Leaflet) ===== */
+  .station-popup .leaflet-popup-content-wrapper{
+    border-radius: 12px;
+    box-shadow: 0 8px 24px rgba(0,0,0,.15);
+  }
+  .station-popup .leaflet-popup-content{
+    /* ancho y tipografía dentro del popup */
+    width: 420px;
+    margin: 14px 16px;
+    font-size: 12px;   /* ↓ 20% aprox. respecto a 14px */
+    line-height: 1.3;
+  }
+  @media (max-width: 1200px){
+    .station-popup .leaflet-popup-content{ width: 380px; }
+  }
+  @media (max-width: 768px){
+    .station-popup .leaflet-popup-content{ width: 320px; font-size: 11px; }
+  }
+
+  /* Scroll del listado de sensores dentro del popup (si hay muchos) */
+  .station-popup ul{
+    max-height: 220px;
+    overflow: auto;
+  }
+</style>
+
+
 {% endblock %}
+
+
+{% block script %}
+<!-- Leaflet (OpenStreetMap) -->
+<link
+  rel="stylesheet"
+  href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+  crossorigin=""
+/>
+<script
+  src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+  integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+  crossorigin=""
+></script>
+
+<script>
+(function(){
+  // ===============================
+  // initMap(): crea el mapa Leaflet
+  // ===============================
+  function initMap() {
+    const map = L.map('map', { zoomControl: true, preferCanvas: true });
+
+    // Capa base OpenStreetMap
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    // Cargar y pintar estaciones
+    loadStations(map);
+
+    // Ajuste de tamaño
+    setTimeout(() => map.invalidateSize(), 50);
+
+    return map;
+  }
+
+  // ==================================================
+  // loadStations(map): pide a la API y pinta marcadores
+  // ==================================================
+  function loadStations(map) {
+    fetch('/api/map/stations/')
+      .then(r => r.json())
+      .then(({stations}) => {
+        if (!stations || !stations.length) {
+          document.getElementById('map').style.display = 'none';
+          document.getElementById('map-placeholder').style.display = 'block';
+          return;
+        }
+
+        const markers = stations.map(st => makeMarker(st).addTo(map));
+        const group = L.featureGroup(markers);
+        map.fitBounds(group.getBounds(), {padding: [30, 30]});
+      })
+      .catch(err => console.error('Error cargando estaciones:', err));
+  }
+
+ // ==========================================
+// makeMarker(st): crea el marker y su popup
+// ==========================================
+function makeMarker(st) {
+  const marker = L.marker([st.lat, st.lng], { title: st.name });
+
+  const statusBadge = st.is_active
+    ? '<span style="background:#e6f4ea;color:#137333;border-radius:6px;padding:3px 8px;font-size:10px;">Activo</span>'
+    : '<span style="background:#fce8e6;color:#a50e0e;border-radius:6px;padding:3px 8px;font-size:10px;">Inactivo</span>';
+
+  const sensorsHtml = st.sensors && st.sensors.length
+    ? `<ul style="list-style:none;padding-left:0;margin:8px 0 0 0;">
+        ${st.sensors.map(s => sensorRow(s)).join('')}
+       </ul>`
+    : '<div style="color:#6c757d;margin-top:8px;">(Sin sensores)</div>';
+
+  const body = `
+    <div style="min-width:260px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+        <div style="font-weight:700;font-size:12px;">${escapeHtml(st.name)}</div>
+        ${statusBadge}
+      </div>
+      <div style="color:#6c757d;font-size:10px;">${escapeHtml(st.company)}</div>
+
+      ${st.description ? `<p style="margin:8px 0 0 0;">${escapeHtml(st.description)}</p>` : ''}
+
+      <div style="display:flex;gap:12px;margin-top:10px;font-size:10px;">
+        <div><strong>${st.sensor_active_count}</strong> activos</div>
+        <div style="color:#6c757d">/ ${st.sensor_count} sensores</div>
+      </div>
+
+      ${sensorsHtml}
+    </div>
+  `;
+
+  marker.bindPopup(body, {
+    className: 'station-popup',
+    maxWidth: 520,
+    minWidth: 340,
+    autoPanPaddingTopLeft: [40, 40],
+    autoPanPaddingBottomRight: [40, 40]
+  });
+
+  return marker;
+}
+
+
+// Render de una fila del listado (cada sensor)
+function sensorRow(s) {
+  const name = escapeHtml(s.name);
+  const unit = escapeHtml(s.unit || '');
+  const val  = (s.last_value == null || Number.isNaN(s.last_value)) ? '--' : Number(s.last_value).toFixed(2);
+  const ts   = s.last_ts ? new Date(s.last_ts) : null;
+  const tstr = ts ? `${ts.getFullYear()}-${String(ts.getMonth()+1).padStart(2,'0')}-${String(ts.getDate()).padStart(2,'0')} ${String(ts.getHours()).padStart(2,'0')}:${String(ts.getMinutes()).padStart(2,'0')}` : '--';
+
+  const activeDot = s.is_active
+    ? '<span style="display:inline-block;width:10px;height:10px;background:#1e8e3e;border-radius:50%;margin-right:8px;"></span>'
+    : '<span style="display:inline-block;width:10px;height:10px;background:#9aa0a6;border-radius:50%;margin-right:8px;"></span>';
+
+  return `
+    <li style="display:flex;justify-content:space-between;gap:14px;border-top:1px solid #f0f0f0;padding:8px 0;">
+      <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:10px;">
+        ${activeDot}${name}
+      </span>
+      <span style="text-align:right;">
+        <div style="font-weight:700;font-size:12px;">${val} ${unit}</div>
+        <div style="color:#6c757d;font-size:10px;">${tstr}</div>
+      </span>
+    </li>
+  `;
+}
+
+  // Escapa HTML simple para el popup
+  function escapeHtml(str){
+    return String(str)
+      .replace(/&/g,'&amp;')
+      .replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;')
+      .replace(/'/g,'&#039;');
+  }
+
+  // Inicializa
+  document.addEventListener('DOMContentLoaded', initMap);
+})();
+</script>
+{% endblock %}
+
+

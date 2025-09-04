@@ -21,6 +21,9 @@ from datetime import datetime, timedelta
 
 from django.utils import timezone
 
+from django.views import View
+from django.db.models import Q, OuterRef, Subquery
+
 
 class CustomLoginView(LoginView):
     template_name = 'main/login.html'
@@ -111,6 +114,75 @@ class DashboardMapView(LoginRequiredMixin, TemplateView):
         context['title']= "Maps"
         context['subtitle']= "Maps"
         return context
+
+class StationLocationsView(LoginRequiredMixin, View):
+    """
+    Devuelve las estaciones visibles para el usuario autenticado, junto con:
+      - is_active de la estación
+      - conteo de sensores (total y activos)
+      - último valor por sensor (value + timestamp + unidad)
+    """
+    login_url = 'login'
+
+    def get(self, request, *args, **kwargs):
+        user = request.user
+
+        # Estaciones visibles para el usuario
+        qs = Station.objects.filter(is_active=True)
+        if not user.is_superuser:
+            qs = qs.filter(
+                Q(company=user.company) | Q(related_users=user)
+            ).distinct()
+
+        # Solo con coordenadas
+        qs = qs.exclude(latitude__isnull=True).exclude(longitude__isnull=True)
+
+        # Sensores de las estaciones visibles
+        sensors_qs = Sensor.objects.select_related('sensor_type', 'station') \
+                                   .filter(station__in=qs)
+
+        # Subqueries para anotar el último valor/ts por sensor
+        last_meas = Measurement.objects.filter(sensor=OuterRef('pk')).order_by('-timestamp')
+        sensors_qs = sensors_qs.annotate(
+            last_value=Subquery(last_meas.values('value')[:1]),
+            last_ts=Subquery(last_meas.values('timestamp')[:1])
+        )
+
+        # Agrupar por estación en Python (evitamos N+1)
+        sensors_by_station = {}
+        for s in sensors_qs:
+            sensors_by_station.setdefault(s.station_id, []).append(s)
+
+        # Serializar estaciones + datos
+        stations_data = []
+        for st in qs.select_related('company'):
+            sensor_list = sensors_by_station.get(st.id, [])
+            total_sensors = len(sensor_list)
+            active_sensors = sum(1 for s in sensor_list if s.is_active)
+
+            stations_data.append({
+                "id": st.id,
+                "name": st.name,
+                "description": st.description or "",
+                "lat": float(st.latitude),
+                "lng": float(st.longitude),
+                "company": st.company.name,
+                "is_active": st.is_active,
+                "sensor_count": total_sensors,
+                "sensor_active_count": active_sensors,
+                "sensors": [
+                    {
+                        "id": s.id,
+                        "name": s.name,
+                        "unit": s.sensor_type.unit if s.sensor_type else "",
+                        "is_active": s.is_active,
+                        "last_value": None if s.last_value is None else float(s.last_value),
+                        "last_ts": s.last_ts.isoformat() if s.last_ts else None
+                    } for s in sensor_list
+                ]
+            })
+
+        return JsonResponse({"stations": stations_data})
 
 class DashboardDataView(LoginRequiredMixin, TemplateView):
     template_name = 'main/dashboard/data.html'

@@ -10,97 +10,91 @@
 <div id="page-content">
   <div class="row">
     <div class="col-lg-12">
-      <div class="panel monitor-panel">
-
-        <!-- BARRA SUPERIOR HORIZONTAL -->
-        <div class="panel-heading compact">
-          <div class="monitor-toolbar">
-            <h3 class="panel-title" id="chart-panel-title">Monitor en Tiempo Real</h3>
-
-
-<div class="toolbar-group station">
-  <label class="toolbar-label">ESTACIÓN</label>
-  <!-- Select + botón en línea -->
-  <div class="station-input">
-    <select id="station-selector" class="form-control form-control-sm">
-      <option value="">Seleccione una estación...</option>
-      {% for station in stations %}
-        <option value="{{ station.id }}">{{ station.name }}</option>
-      {% endfor %}
-    </select>
-
-    <button type="button" id="load-sensors-btn" class="btn btn-primary btn-sm">
-      Consultar
-    </button>
-  </div>
-</div>
-
-            <div class="toolbar-group">
-              <div class="range-chips" id="range-chips">
-                <button class="chip active" data-range="5m">5 min</button>
-                <button class="chip" data-range="30m">30 min</button>
-                <button class="chip" data-range="1h">1 h</button>
-                <button class="chip" data-range="3h">3 h</button>
-              </div>
-              <span id="live-indicator" class="live-indicator on">En vivo</span>
-              <button id="back-to-live" class="btn btn-link btn-xs" style="display:none;">Volver al vivo</button>
-            </div>
-          </div>
+      <div class="panel">
+        <div class="panel-heading">
+          <h3 class="panel-title" id="chart-panel-title">Monitor en Tiempo Real</h3>
         </div>
 
-        <!-- CONTENIDO -->
         <div class="panel-body monitor-flex">
           <!-- IZQUIERDA: gráfico -->
           <div class="chart-wrap">
             <div id="unified-chart"></div>
           </div>
 
-          <!-- DERECHA: SOLO valores en vivo -->
+          <!-- DERECHA: controles + rangos + valores -->
           <aside class="side-wrap">
+            <!-- Controles -->
+            <div class="panel" style="margin-bottom:0;">
+              <div class="panel-body">
+                <div class="pad-all">
+                  <span class="pad-ver text-main text-sm text-uppercase text-bold">SELECCIONE ESTACIÓN</span>
+                  <div class="form-group">
+                    <select id="station-selector" class="form-control">
+                      <option value="">Seleccione una estación...</option>
+                      {% for station in stations %}
+                        <option value="{{ station.id }}">{{ station.name }}</option>
+                      {% endfor %}
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <button id="load-sensors-btn" class="btn btn-primary btn-block">Consultar</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Rangos rápidos + estado vivo -->
+            <div class="panel" style="margin-bottom:0;">
+              <div class="panel-body">
+                <div class="range-chips" id="range-chips">
+                  <button class="chip active" data-range="5m">5 min</button>
+                  <button class="chip" data-range="30m">30 min</button>
+                  <button class="chip" data-range="1h">1 h</button>
+                  <button class="chip" data-range="3h">3 h</button>
+                </div>
+                <div style="margin-top:8px; display:flex; justify-content:space-between; align-items:center;">
+                  <span id="live-indicator" class="live-indicator on">En vivo</span>
+                  <button id="back-to-live" class="btn btn-sm btn-link" style="display:none;">Volver al vivo</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Valores en vivo -->
             <div class="panel values-panel">
-              
-              <div class="panel-body" id="values-panel"></div>
+              <div class="panel-heading">
+                <h3 class="panel-title">Valores en vivo</h3>
+              </div>
+              <div class="panel-body" id="values-panel">
+                <!-- dinámico -->
+              </div>
             </div>
           </aside>
         </div>
-
       </div>
     </div>
   </div>
 </div>
 
 <style>
-  /* ===== Layout compacto ===== */
-  .monitor-panel .panel-heading.compact{ padding:5px 7px; }
-  .monitor-toolbar{
-    position:relative; z-index:3;  /* asegura clics por encima de cualquier canvas */
-    display:flex; align-items:center; gap:12px; flex-wrap:wrap;
-  }
-  .monitor-toolbar .panel-title{ margin:0 8px 0 0; font-size:16px; font-weight:600; }
-  .toolbar-group{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
-  .toolbar-label{ margin:0; font-size:12px; text-transform:uppercase; color:#6c757d; }
-
-  .monitor-flex{ display:flex; gap:12px; align-items:stretch; }
+  .monitor-flex{ display:flex; gap:16px; align-items:stretch; }
   .chart-wrap{ flex:1 1 auto; min-width:0; }
-  #unified-chart{ width:100%; height:78vh; }
+  #unified-chart{ width:100%; height:75vh; }
 
-  .side-wrap{ width:280px; flex:0 0 280px; display:flex; flex-direction:column; max-height:78vh; }
+  .side-wrap{ width:300px; flex:0 0 300px; display:flex; flex-direction:column; gap:12px; max-height:75vh; }
   .values-panel{ flex:1 1 auto; overflow:auto; margin-bottom:0; }
 
-  /* Tarjetas de valores */
   #values-panel .live-card{
     border:1px solid #e9ecef; border-radius:10px; padding:10px 12px; margin-bottom:10px;
     display:flex; justify-content:space-between; align-items:baseline; background:#fff;
   }
   #values-panel .live-card .name{ font-weight:600; }
-  #values-panel .live-card .val{ font-size:1.35em; font-weight:300; }
+  #values-panel .live-card .val{ font-size:1.4em; font-weight:300; }
   #values-panel .live-card .unit{ color:#6c757d; font-size:.9em; margin-left:4px; }
 
-  /* Chips */
+  /* Chips de rango */
   .range-chips{ display:flex; flex-wrap:wrap; gap:8px; }
   .range-chips .chip{
-    border:1px solid #cfd4da; border-radius:999px; padding:6px 12px;
-    background:#fff; font-size:12px; cursor:pointer;
+    border:1px solid #cfd4da; border-radius:999px; padding:6px 12px; background:#fff; font-size:12px; cursor:pointer;
   }
   .range-chips .chip.active{ background:#0d6efd; color:#fff; border-color:#0d6efd; }
 
@@ -110,7 +104,6 @@
     box-shadow:0 0 0 2px rgba(40,167,69,.15);
   }
 
-  /* Responsive */
   @media (max-width: 992px){
     .monitor-flex{ flex-direction:column; }
     .side-wrap{ width:100%; flex-basis:auto; max-height:none; }
@@ -119,26 +112,8 @@
   @media (max-width: 576px){
     #unified-chart{ height:55vh; }
   }
-
-  /* Mantener select + botón en la misma línea y que el botón NO “salte” hacia abajo */
-.toolbar-group.station { flex-wrap: nowrap; }
-
-.station-input{
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  white-space: nowrap;          /* evita el salto del botón */
-}
-
-.station-input select{ min-width: 260px; }   /* ancho cómodo; ajusta si quieres */
-#load-sensors-btn{ white-space: nowrap; }    /* el texto no se parte */
-
-/* Un poco más de aire debajo de la barra para que nunca “toque” el chart */
-.monitor-panel .panel-heading.compact{ padding-bottom: 12px; }
-
 </style>
 {% endblock %}
-
 
 
 {% block script %}
@@ -368,43 +343,22 @@ $(function () {
   // ============================
 function buildUnifiedChartOption(sensors) {
   const n = sensors.length;
-
-  // ====== LAYOUT EN PÍXELES (gap real de 1–2 px) ======
-  // Puedes ajustar estos 3 valores a tu gusto:
-  const GAP_PX          = 15;   // << separación vertical entre subgráficos (1–2 px)
-  const TOP_MARGIN_PX   = 12;   // margen superior del área de grids
-  const BOTTOM_MARGIN_PX= 62;  // margen inferior para labels del último eje + slider
-
-  // márgenes laterales (en %) para conservar el eje Y legible
-  const LEFT_MARGIN_PCT  = 4;
-  const RIGHT_MARGIN_PCT = 2;
-
-  // Altura total disponible del chart en px
-  const CH = (typeof unifiedChart?.getHeight === 'function')
-    ? unifiedChart.getHeight()
-    : document.getElementById('unified-chart').clientHeight;
-
-  const usablePx = CH - TOP_MARGIN_PX - BOTTOM_MARGIN_PX - (GAP_PX * (n - 1));
-  const eachHPx  = usablePx / n;
+  const leftMarginPct = 9, rightMarginPct = 3;
+  const topMargin = 6, bottomMargin = 12, gap = 2;
+  const usable = 100 - topMargin - bottomMargin - (gap * (n - 1));
+  const eachH = usable / n;
 
   const grids = [], xAxes = [], yAxes = [], series = [], graphics = [];
   const colorPalette = ['#5470C6','#91CC75','#FAC858','#EE6666','#73C0DE','#3BA272','#FC8452','#9A60B4','#EA7CCC'];
 
   sensors.forEach((s, i) => {
-    const topPx = Math.round(TOP_MARGIN_PX + i * (eachHPx + GAP_PX));
-
-    // Grid en píxeles (top/height) y % a los lados
-    grids.push({
-      top: topPx, height: Math.round(eachHPx),
-      left: `${LEFT_MARGIN_PCT}%`, right: `${RIGHT_MARGIN_PCT}%`
-    });
-
+    const top = topMargin + i * (eachH + gap);
+    grids.push({ top: `${top}%`, height: `${eachH}%`, left: `${leftMarginPct}%`, right: `${rightMarginPct}%` });
     xAxes.push({
       type: 'time', gridIndex: i, axisPointer: { show: true, snap: true },
       axisLabel: { show: i === n - 1, hideOverlap: true },
       axisLine:  { show: i === n - 1 }, axisTick: { show: i === n - 1 }, splitLine: { show: i === n - 1 }
     });
-
     yAxes.push({
       type: 'value', gridIndex: i, splitNumber: 3,
       min: isFinite(s.min_value) ? s.min_value : null,
@@ -413,25 +367,14 @@ function buildUnifiedChartOption(sensors) {
         formatter: (v) => Math.abs(v) >= 1000 ? (v/1000).toFixed(1).replace(/\.0$/,'')+'k' : v
       }
     });
-
-    // Serie con markLine en y=0 para que la línea base destaque
     series.push({
       name: s.name, id: String(s.id), type: 'line', showSymbol: false,
       xAxisIndex: i, yAxisIndex: i, data: [],
       lineStyle: { width: 2, color: colorPalette[i % colorPalette.length] },
-      itemStyle: { color: colorPalette[i % colorPalette.length] },
-      markLine: {
-        symbol: 'none', silent: true,
-        lineStyle: { color: '#9CA3AF', width: 1.5, opacity: 0.9 },
-        data: [{ yAxis: 0 }]
-      }
+      itemStyle: { color: colorPalette[i % colorPalette.length] }
     });
-
-    // Etiqueta del sensor encima de cada grid
     graphics.push({
-      type:'text',
-      left:`${LEFT_MARGIN_PCT + 0.5}%`,
-      top: topPx + 2,
+      type:'text', left:`${leftMarginPct + 1}%`, top:`${top + 1}%`,
       style:{ text:s.name, fontSize:12, fill:'#495057', backgroundColor:'rgba(255,255,255,0.6)', padding:[2,4] },
       silent:true
     });
@@ -443,22 +386,26 @@ function buildUnifiedChartOption(sensors) {
     { type:'slider', xAxisIndex:xIdx, bottom:2 }
   ];
 
-  // Tooltip unificado (igual que lo tienes)
+  // ===== Tooltip UNIFICADO (toma todos los sensores) =====
   const tooltip = {
     trigger:'axis',
     axisPointer:{ type:'cross', link:[{ xAxisIndex:'all' }], snap:true },
     confine:true,
     formatter: function(params){
       if(!params || !params.length) return '';
+      // Timestamp objetivo (del eje)
       const tsAny = params[0].axisValue ?? params[0].value?.[0];
       const targetMs = (tsAny instanceof Date) ? tsAny.getTime() : new Date(tsAny).getTime();
       const d = new Date(targetMs);
-      const dd = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}
-                  ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
+      const dd = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
 
+      // Serie "destacada": la que estás sobrevolando
       const highlightedName = params[0].seriesName;
-      let html = `<div style="min-width:260px"><div style="font-weight:700;margin-bottom:6px">${dd}</div>`;
 
+      let html = `<div style="min-width:260px">
+                    <div style="font-weight:700;margin-bottom:6px">${dd}</div>`;
+
+      // 1) Línea grande para la serie destacada
       const highlighted = Object.values(sensorMetadata).find(s => s.name === highlightedName);
       if (highlighted) {
         const sid = highlighted.id;
@@ -475,6 +422,7 @@ function buildUnifiedChartOption(sensors) {
                  </div>`;
       }
 
+      // 2) Resto de sensores (pequeño)
       currentSensorIds.forEach((sid) => {
         const s = sensorMetadata[sid];
         if (!s || s.name === highlightedName) return;
@@ -498,8 +446,6 @@ function buildUnifiedChartOption(sensors) {
 
   return { animation:false, grid:grids, xAxis:xAxes, yAxis:yAxes, series, dataZoom, tooltip, graphic:graphics };
 }
-
-
 
 
   function findSensorByName(name) {

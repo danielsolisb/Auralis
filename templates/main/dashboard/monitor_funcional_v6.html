@@ -1,0 +1,381 @@
+{% extends 'main/dashboard.html' %}
+{% load static %}
+
+{% block fixedbar %}
+{# Este bloque ahora está vacío, como solicitaste #}
+{% endblock %}
+
+{% block content %}
+<!--Page content-->
+<div id="page-content">
+  <div class="row">
+    <div class="col-lg-12">
+      <div class="panel">
+        <div class="panel-heading">
+          <h3 class="panel-title" id="chart-panel-title">Monitor en Tiempo Real</h3>
+        </div>
+
+        <!-- Layout: gráfico a la izquierda + sidebar derecha (controles + valores) -->
+        <div class="panel-body monitor-flex">
+          <!-- IZQUIERDA: Gráfico ocupa todo el espacio disponible -->
+          <div class="chart-wrap">
+            <div id="unified-chart"></div>
+          </div>
+
+          <!-- DERECHA: Controles (arriba) + Valores en vivo (abajo) -->
+          <aside class="side-wrap">
+            <!-- Controles -->
+            <div class="panel" style="margin-bottom:0;">
+              <div class="panel-body">
+                <div class="pad-all">
+                  <span class="pad-ver text-main text-sm text-uppercase text-bold">SELECCIONE ESTACIÓN</span>
+                  <div class="form-group">
+                    <select id="station-selector" class="form-control">
+                      <option value="">Seleccione una estación...</option>
+                      {% for station in stations %}
+                        <option value="{{ station.id }}">{{ station.name }}</option>
+                      {% endfor %}
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <button id="load-sensors-btn" class="btn btn-primary btn-block">Consultar</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Valores en vivo -->
+            <div class="panel values-panel">
+              <div class="panel-heading">
+                <h3 class="panel-title">Valores en vivo</h3>
+              </div>
+              <div class="panel-body" id="values-panel">
+                <!-- Se llena dinámicamente -->
+              </div>
+            </div>
+          </aside>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  /* --- Layout base (desktop) --- */
+  .monitor-flex{
+    display:flex; gap:16px; align-items:stretch;
+  }
+  .chart-wrap{ flex:1 1 auto; min-width:0; }
+  #unified-chart{ width:100%; height:75vh; }
+
+  .side-wrap{
+    width:300px; flex:0 0 300px; display:flex; flex-direction:column; gap:12px; max-height:75vh;
+  }
+  .values-panel{ flex:1 1 auto; overflow:auto; margin-bottom:0; }
+
+  /* Tarjetas compactas (panel derecha) */
+  #values-panel .live-card{
+    border:1px solid #e9ecef; border-radius:10px; padding:10px 12px; margin-bottom:10px;
+    display:flex; justify-content:space-between; align-items:baseline; background:#fff;
+  }
+  #values-panel .live-card .name{ font-weight:600; }
+  #values-panel .live-card .val{ font-size:1.4em; font-weight:300; }
+  #values-panel .live-card .unit{ color:#6c757d; font-size:.9em; margin-left:4px; }
+
+  /* --- Responsive --- */
+  @media (max-width: 1200px){
+    .side-wrap{ width:260px; flex-basis:260px; }
+  }
+  @media (max-width: 992px){
+    .monitor-flex{ flex-direction:column; }
+    .side-wrap{ width:100%; flex-basis:auto; max-height:none; }
+    #unified-chart{ height:60vh; }
+  }
+  @media (max-width: 576px){
+    #unified-chart{ height:55vh; }
+  }
+</style>
+{% endblock %}
+
+{% block script %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.4.3/echarts.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js" type="text/javascript"></script>
+
+<script>
+$(function () {
+  // ============================
+  // ESTADO GLOBAL
+  // ============================
+  let mqttClient = null;
+  let currentSubscriptions = [];
+  let currentStationName = '';
+
+  let sensorMetadata = {};     // { id: {id,name,unit,min_value,max_value,...} }
+  let sensorIndexById = {};    // { id: index }
+  let seriesBuffers = {};      // { id: [ [Date,value], ... ] }
+  let currentSensorIds = [];   // [id,id,...] en el orden de render
+
+  let activeAxisIndex = null;  // para saber qué sub-grilla está "activa" (puntero)
+
+  const MAX_POINTS = 600;
+  const colorPalette = ['#5470C6','#91CC75','#FAC858','#EE6666','#73C0DE','#3BA272','#FC8452','#9A60B4','#EA7CCC'];
+
+  // DOM
+  const stationSelector  = $('#station-selector');
+  const loadButton       = $('#load-sensors-btn');
+  const valuesPanel      = $('#values-panel');
+  const chartDom         = document.getElementById('unified-chart');
+  const unifiedChart     = echarts.init(chartDom);
+
+  // ============================
+  // MQTT
+  // ============================
+  initMQTTClient();
+
+  if (!stationSelector.val()) loadButton.prop('disabled', true);
+  stationSelector.on('change', () => loadButton.prop('disabled', !stationSelector.val()));
+  loadButton.on('click', () => {
+    const stationId = stationSelector.val();
+    if (stationId) fetchAndRenderUnifiedChart(stationId);
+  });
+
+  function initMQTTClient() {
+    const clientId = "auralis_dashboard_" + Math.random().toString(16).substr(2, 8);
+    try {
+      mqttClient = new Paho.MQTT.Client("{{ mqtt_broker_ip }}", Number("{{ mqtt_broker_port }}"), "/", clientId);
+      mqttClient.onConnectionLost = onConnectionLost;
+      mqttClient.onMessageArrived = onMessageArrived;
+      mqttClient.connect({
+        onSuccess: () => console.log("MQTT Conectado"),
+        onFailure: (e) => console.error("Conexión MQTT fallida:", e),
+        useSSL: false, keepAliveInterval: 60
+      });
+    } catch (e) { console.error("Error creando cliente MQTT:", e); }
+  }
+  function onConnectionLost(resp) {
+    if (resp.errorCode !== 0) {
+      console.log("Conexión MQTT perdida:", resp.errorMessage);
+      setTimeout(initMQTTClient, 5000);
+    }
+  }
+  function subscribeToTopic(topic) {
+    if (mqttClient && mqttClient.isConnected()) {
+      mqttClient.subscribe(topic);
+      currentSubscriptions.push(topic);
+    }
+  }
+  function unsubscribeFromAllTopics() {
+    if (mqttClient && mqttClient.isConnected()) {
+      currentSubscriptions.forEach(t => mqttClient.unsubscribe(t));
+    }
+    currentSubscriptions = [];
+  }
+
+  // ============================
+  // CARGAR SENSORES + ARMAR CHART
+  // ============================
+  function fetchAndRenderUnifiedChart(stationId) {
+    unsubscribeFromAllTopics();
+
+    // reset
+    sensorMetadata = {}; sensorIndexById = {}; seriesBuffers = {};
+    currentSensorIds = []; activeAxisIndex = null;
+    unifiedChart.clear(); valuesPanel.empty();
+
+    $.getJSON(`/api/stations/${stationId}/sensors/`, function (response) {
+      if (!response.sensors || response.sensors.length === 0) return;
+
+      currentStationName = response.station_name;
+      $('#chart-panel-title').text(`Monitor en Tiempo Real - ${currentStationName}`);
+
+      // order & buffers
+      currentSensorIds = response.sensors.map(s => s.id);
+      response.sensors.forEach((s, i) => {
+        sensorMetadata[s.id] = s;
+        sensorIndexById[s.id] = i;
+        seriesBuffers[s.id] = [];
+        valuesPanel.append(`
+          <div class="live-card" id="live-card-${s.id}">
+            <span class="name">${s.name}</span>
+            <span><span class="val" id="value-display-${s.id}">--</span>
+            <span class="unit">${s.unit || ''}</span></span>
+          </div>`);
+      });
+
+      const option = buildUnifiedChartOption(response.sensors);
+      unifiedChart.setOption(option, true);
+
+      // Detectar grilla activa para el tooltip mixto
+      unifiedChart.off('updateAxisPointer');
+      unifiedChart.on('updateAxisPointer', function (e) {
+        if (e.axesInfo && e.axesInfo.length) activeAxisIndex = e.axesInfo[0].axisIndex;
+      });
+
+      // Suscripciones MQTT
+      response.sensors.forEach(sensor => {
+        const topic = `${currentStationName}/${sensor.name}/`;
+        subscribeToTopic(topic);
+      });
+
+      // Resize
+      setTimeout(() => unifiedChart.resize(), 0);
+      $(window).off('resize._auralis').on('resize._auralis', () => unifiedChart.resize());
+    });
+  }
+
+  // ============================
+  // OPCIÓN ECHARTS (una línea de tiempo + etiquetas por grid)
+  // ============================
+  function buildUnifiedChartOption(sensors) {
+    const n = sensors.length;
+    const leftMarginPct = 9, rightMarginPct = 3;
+    const topMargin = 6, bottomMargin = 12, gap = 2;
+    const usable = 100 - topMargin - bottomMargin - (gap * (n - 1));
+    const eachH = usable / n;
+
+    const grids = [], xAxes = [], yAxes = [], series = [], graphics = [];
+    sensors.forEach((s, i) => {
+      const top = topMargin + i * (eachH + gap);
+      grids.push({ top: `${top}%`, height: `${eachH}%`, left: `${leftMarginPct}%`, right: `${rightMarginPct}%` });
+      xAxes.push({
+        type: 'time', gridIndex: i, axisPointer: { show: true, snap: true },
+        axisLabel: { show: i === n - 1, hideOverlap: true },
+        axisLine:  { show: i === n - 1 }, axisTick: { show: i === n - 1 }, splitLine: { show: i === n - 1 }
+      });
+      yAxes.push({
+        type: 'value', gridIndex: i, splitNumber: 3,
+        min: isFinite(s.min_value) ? s.min_value : null,
+        max: isFinite(s.max_value) ? s.max_value : null,
+        axisLabel: {
+          formatter: (v) => Math.abs(v) >= 1000 ? (v/1000).toFixed(1).replace(/\.0$/,'')+'k' : v
+        }
+      });
+      series.push({
+        name: s.name, id: String(s.id), type: 'line', showSymbol: false,
+        xAxisIndex: i, yAxisIndex: i, data: [],
+        lineStyle: { width: 2, color: colorPalette[i % colorPalette.length] },
+        itemStyle: { color: colorPalette[i % colorPalette.length] }
+      });
+      graphics.push({
+        type:'text', left:`${leftMarginPct + 1}%`, top:`${top + 1}%`,
+        style:{ text:s.name, fontSize:12, fill:'#495057', backgroundColor:'rgba(255,255,255,0.6)', padding:[2,4] },
+        silent:true
+      });
+    });
+
+    const xIdx = sensors.map((_, i) => i);
+    const dataZoom = [
+      { type:'inside', xAxisIndex:xIdx },
+      { type:'slider', xAxisIndex:xIdx, bottom:2 }
+    ];
+
+    // TOOLTIP MIXTO: destaca serie activa y muestra el resto pequeño
+    const tooltip = {
+      trigger:'axis',
+      axisPointer:{ type:'cross', link:[{ xAxisIndex:'all' }], snap:true },
+      confine:true,
+      formatter: function(params){
+        if(!params || !params.length) return '';
+        // Tiempo pivote (del eje)
+        const ts = params[0].axisValue ?? params[0].value?.[0];
+        const d  = new Date(ts);
+        const dd = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
+
+        // Serie "activa" = grilla bajo el puntero (si no, la 1ª)
+        const primaryIdx = (activeAxisIndex != null && activeAxisIndex < currentSensorIds.length)
+                           ? activeAxisIndex : 0;
+        const primaryId  = currentSensorIds[primaryIdx];
+
+        // Armar filas: primero la primaria, luego el resto en pequeño
+        const rows = [];
+        const pVal = nearestValue(primaryId, ts);
+        rows.push(renderRow(primaryId, pVal, true));
+
+        currentSensorIds.forEach((sid, i)=>{
+          if (sid === primaryId) return;
+          const v = nearestValue(sid, ts);
+          rows.push(renderRow(sid, v, false, i));
+        });
+
+        return `<div style="min-width:240px">
+                  <div style="font-weight:600;margin-bottom:6px">${dd}</div>
+                  ${rows.join('')}
+                </div>`;
+      }
+    };
+
+    return { animation:false, grid:grids, xAxis:xAxes, yAxis:yAxes, series, dataZoom, tooltip, graphic:graphics };
+  }
+
+  // Valor más cercano al timestamp "ts" dentro del buffer de un sensor
+  function nearestValue(sensorId, ts){
+    const arr = seriesBuffers[sensorId];
+    if(!arr || !arr.length) return null;
+    const target = (ts instanceof Date) ? ts.getTime() : new Date(ts).getTime();
+    let best = arr[0][1], bestDiff = Math.abs(arr[0][0].getTime() - target);
+    for(let i=1;i<arr.length;i++){
+      const diff = Math.abs(arr[i][0].getTime() - target);
+      if(diff < bestDiff){ bestDiff = diff; best = arr[i][1]; }
+    }
+    return best;
+  }
+
+  // Render de una fila del tooltip
+  function renderRow(sensorId, value, isPrimary){
+    const meta  = sensorMetadata[sensorId] || {};
+    const name  = meta.name || `Sensor ${sensorId}`;
+    const unit  = meta.unit || '';
+    const idx   = sensorIndexById[sensorId] ?? 0;
+    const color = colorPalette[idx % colorPalette.length];
+    const valText = (value==null || Number.isNaN(value)) ? '--' : Number(value).toFixed(2);
+
+    if(isPrimary){
+      return `<div style="display:flex;justify-content:space-between;gap:12px;margin:2px 0;">
+                <span><span style="display:inline-block;width:10px;height:10px;background:${color};margin-right:6px;border-radius:50%"></span>${name}</span>
+                <span style="font-size:14px;font-weight:700">${valText} ${unit}</span>
+              </div>`;
+    }else{
+      return `<div style="display:flex;justify-content:space-between;gap:12px;opacity:.8">
+                <span style="font-size:12px;"><span style="display:inline-block;width:8px;height:8px;background:${color};margin-right:6px;border-radius:50%"></span>${name}</span>
+                <span style="font-size:12px;font-weight:600">${valText} ${unit}</span>
+              </div>`;
+    }
+  }
+
+  // ============================
+  // MQTT → actualizar gráfico + tarjetas
+  // ============================
+  function onMessageArrived(message) {
+    const topic = message.destinationName;  // "Station/Sensor/"
+    const payload = message.payloadString;
+
+    const parts = topic.slice(0, -1).split('/'); // quita "/" final
+    if (parts.length < 2) return;
+    if (parts[0] !== currentStationName) return;
+
+    const sensorName = parts[1];
+    const sensor = Object.values(sensorMetadata).find(s => s.name === sensorName);
+    if (!sensor) return;
+
+    const val = parseFloat(payload);
+    if (Number.isNaN(val)) return;
+
+    updateChartData(sensor.id, val);
+  }
+
+  function updateChartData(sensorId, value) {
+    const now = new Date();
+
+    // Tarjeta (derecha)
+    $('#value-display-' + sensorId).text(Number(value).toFixed(2));
+
+    // Buffer y serie
+    const buf = seriesBuffers[sensorId];
+    buf.push([now, value]);
+    if (buf.length > MAX_POINTS) buf.shift();
+
+    unifiedChart.setOption({ series: [{ id:String(sensorId), data: buf }] }, false, true);
+  }
+});
+</script>
+{% endblock %}

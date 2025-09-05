@@ -267,41 +267,49 @@ def get_station_sensors(request, station_id):
 
 @login_required
 def get_station_history(request, station_id):
-    # 1. Obtener el rango de tiempo desde los parámetros GET (ej: ?timescale=1h)
-    timescale = request.GET.get('timescale', '1m') # Por defecto 1 minuto
-
-    # 2. Calcular el tiempo de inicio basado en la escala
+    # Escalas soportadas: 1m, 5m, 30m, 1h, 3h, 6h, 12h
+    timescale = request.GET.get('timescale', '5m')  # por defecto 5 minutos
     now = timezone.now()
-    if timescale == '1h':
+
+    # Mapeo sencillo
+    M = 60  # segundos por minuto, solo para legibilidad si quisieras usarlo
+    if timescale == '1m':
+        start_time = now - timedelta(minutes=1)
+    elif timescale == '5m':
+        start_time = now - timedelta(minutes=5)
+    elif timescale == '30m':
+        start_time = now - timedelta(minutes=30)
+    elif timescale == '1h':
         start_time = now - timedelta(hours=1)
+    elif timescale == '3h':
+        start_time = now - timedelta(hours=3)
     elif timescale == '6h':
         start_time = now - timedelta(hours=6)
     elif timescale == '12h':
         start_time = now - timedelta(hours=12)
-    else: # Por defecto '1m' o 60 segundos
-        start_time = now - timedelta(minutes=1)
+    else:
+        # fallback conservador
+        start_time = now - timedelta(minutes=5)
 
     try:
-        # 3. Validar que el usuario tiene acceso a la estación
+        # Valida acceso
         station = Station.objects.get(id=station_id, related_users=request.user)
 
-        # 4. Obtener las mediciones de TODOS los sensores de esa estación en el rango de tiempo
-        measurements = Measurement.objects.filter(
-            sensor__station=station,
-            timestamp__gte=start_time
-        ).order_by('timestamp').values('sensor_id', 'timestamp', 'value')
+        # Histórico crudo de TODOS los sensores de la estación dentro del rango
+        measurements = (
+            Measurement.objects
+            .filter(sensor__station=station, timestamp__gte=start_time)
+            .order_by('timestamp')
+            .values('sensor_id', 'timestamp', 'value')
+        )
 
-        # 5. Formatear los datos para ECharts
+        # ECharts: { sensor_id: [[tsISO, value], ...] }
         history_data = {}
         for m in measurements:
-            sensor_id = m['sensor_id']
-            if sensor_id not in history_data:
-                history_data[sensor_id] = []
-
-            # ECharts prefiere el formato [timestamp, value]
-            history_data[sensor_id].append([
+            sid = m['sensor_id']
+            history_data.setdefault(sid, []).append([
                 m['timestamp'].isoformat(),
-                m['value']
+                float(m['value']),
             ])
 
         return JsonResponse(history_data)

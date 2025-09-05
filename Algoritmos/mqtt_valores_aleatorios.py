@@ -6,7 +6,7 @@ import random
 from datetime import datetime
 import paho.mqtt.client as mqtt
 
-BROKER_HOST = "34.135.82.255"
+BROKER_HOST = "34.30.17.212"
 BROKER_PORT = 8081            # WebSocket típicamente en 8081
 USE_WEBSOCKET = True          # Usaremos WebSocket porque el puerto es 8081
 KEEPALIVE = 60

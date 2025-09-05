@@ -58,7 +58,9 @@
           <!-- DERECHA: SOLO valores en vivo -->
           <aside class="side-wrap">
             <div class="panel values-panel">
-              
+              <div class="panel-heading">
+                <h3 class="panel-title">Valores en vivo</h3>
+              </div>
               <div class="panel-body" id="values-panel"></div>
             </div>
           </aside>
@@ -71,7 +73,7 @@
 
 <style>
   /* ===== Layout compacto ===== */
-  .monitor-panel .panel-heading.compact{ padding:5px 7px; }
+  .monitor-panel .panel-heading.compact{ padding:8px 12px; }
   .monitor-toolbar{
     position:relative; z-index:3;  /* asegura clics por encima de cualquier canvas */
     display:flex; align-items:center; gap:12px; flex-wrap:wrap;
@@ -368,43 +370,22 @@ $(function () {
   // ============================
 function buildUnifiedChartOption(sensors) {
   const n = sensors.length;
-
-  // ====== LAYOUT EN PÍXELES (gap real de 1–2 px) ======
-  // Puedes ajustar estos 3 valores a tu gusto:
-  const GAP_PX          = 15;   // << separación vertical entre subgráficos (1–2 px)
-  const TOP_MARGIN_PX   = 12;   // margen superior del área de grids
-  const BOTTOM_MARGIN_PX= 62;  // margen inferior para labels del último eje + slider
-
-  // márgenes laterales (en %) para conservar el eje Y legible
-  const LEFT_MARGIN_PCT  = 4;
-  const RIGHT_MARGIN_PCT = 2;
-
-  // Altura total disponible del chart en px
-  const CH = (typeof unifiedChart?.getHeight === 'function')
-    ? unifiedChart.getHeight()
-    : document.getElementById('unified-chart').clientHeight;
-
-  const usablePx = CH - TOP_MARGIN_PX - BOTTOM_MARGIN_PX - (GAP_PX * (n - 1));
-  const eachHPx  = usablePx / n;
+  const leftMarginPct = 9, rightMarginPct = 3;
+  const topMargin = 6, bottomMargin = 12, gap = 2;
+  const usable = 100 - topMargin - bottomMargin - (gap * (n - 1));
+  const eachH = usable / n;
 
   const grids = [], xAxes = [], yAxes = [], series = [], graphics = [];
   const colorPalette = ['#5470C6','#91CC75','#FAC858','#EE6666','#73C0DE','#3BA272','#FC8452','#9A60B4','#EA7CCC'];
 
   sensors.forEach((s, i) => {
-    const topPx = Math.round(TOP_MARGIN_PX + i * (eachHPx + GAP_PX));
-
-    // Grid en píxeles (top/height) y % a los lados
-    grids.push({
-      top: topPx, height: Math.round(eachHPx),
-      left: `${LEFT_MARGIN_PCT}%`, right: `${RIGHT_MARGIN_PCT}%`
-    });
-
+    const top = topMargin + i * (eachH + gap);
+    grids.push({ top: `${top}%`, height: `${eachH}%`, left: `${leftMarginPct}%`, right: `${rightMarginPct}%` });
     xAxes.push({
       type: 'time', gridIndex: i, axisPointer: { show: true, snap: true },
       axisLabel: { show: i === n - 1, hideOverlap: true },
       axisLine:  { show: i === n - 1 }, axisTick: { show: i === n - 1 }, splitLine: { show: i === n - 1 }
     });
-
     yAxes.push({
       type: 'value', gridIndex: i, splitNumber: 3,
       min: isFinite(s.min_value) ? s.min_value : null,
@@ -413,25 +394,14 @@ function buildUnifiedChartOption(sensors) {
         formatter: (v) => Math.abs(v) >= 1000 ? (v/1000).toFixed(1).replace(/\.0$/,'')+'k' : v
       }
     });
-
-    // Serie con markLine en y=0 para que la línea base destaque
     series.push({
       name: s.name, id: String(s.id), type: 'line', showSymbol: false,
       xAxisIndex: i, yAxisIndex: i, data: [],
       lineStyle: { width: 2, color: colorPalette[i % colorPalette.length] },
-      itemStyle: { color: colorPalette[i % colorPalette.length] },
-      markLine: {
-        symbol: 'none', silent: true,
-        lineStyle: { color: '#9CA3AF', width: 1.5, opacity: 0.9 },
-        data: [{ yAxis: 0 }]
-      }
+      itemStyle: { color: colorPalette[i % colorPalette.length] }
     });
-
-    // Etiqueta del sensor encima de cada grid
     graphics.push({
-      type:'text',
-      left:`${LEFT_MARGIN_PCT + 0.5}%`,
-      top: topPx + 2,
+      type:'text', left:`${leftMarginPct + 1}%`, top:`${top + 1}%`,
       style:{ text:s.name, fontSize:12, fill:'#495057', backgroundColor:'rgba(255,255,255,0.6)', padding:[2,4] },
       silent:true
     });
@@ -443,22 +413,26 @@ function buildUnifiedChartOption(sensors) {
     { type:'slider', xAxisIndex:xIdx, bottom:2 }
   ];
 
-  // Tooltip unificado (igual que lo tienes)
+  // ===== Tooltip UNIFICADO (toma todos los sensores) =====
   const tooltip = {
     trigger:'axis',
     axisPointer:{ type:'cross', link:[{ xAxisIndex:'all' }], snap:true },
     confine:true,
     formatter: function(params){
       if(!params || !params.length) return '';
+      // Timestamp objetivo (del eje)
       const tsAny = params[0].axisValue ?? params[0].value?.[0];
       const targetMs = (tsAny instanceof Date) ? tsAny.getTime() : new Date(tsAny).getTime();
       const d = new Date(targetMs);
-      const dd = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}
-                  ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
+      const dd = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
 
+      // Serie "destacada": la que estás sobrevolando
       const highlightedName = params[0].seriesName;
-      let html = `<div style="min-width:260px"><div style="font-weight:700;margin-bottom:6px">${dd}</div>`;
 
+      let html = `<div style="min-width:260px">
+                    <div style="font-weight:700;margin-bottom:6px">${dd}</div>`;
+
+      // 1) Línea grande para la serie destacada
       const highlighted = Object.values(sensorMetadata).find(s => s.name === highlightedName);
       if (highlighted) {
         const sid = highlighted.id;
@@ -475,6 +449,7 @@ function buildUnifiedChartOption(sensors) {
                  </div>`;
       }
 
+      // 2) Resto de sensores (pequeño)
       currentSensorIds.forEach((sid) => {
         const s = sensorMetadata[sid];
         if (!s || s.name === highlightedName) return;
@@ -498,8 +473,6 @@ function buildUnifiedChartOption(sensors) {
 
   return { animation:false, grid:grids, xAxis:xAxes, yAxis:yAxes, series, dataZoom, tooltip, graphic:graphics };
 }
-
-
 
 
   function findSensorByName(name) {

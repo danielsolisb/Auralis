@@ -9,7 +9,7 @@ from .views import (
     DashboardMapView, DashboardMonitorView, 
     DashboardSettingsView, DashboardSupportView,
     StationDataView, DataHistoryView, DataReportView,
-    get_station_sensors, get_station_data, get_station_history, StationLocationsView  # Asegúrate de importar esta función también
+    get_station_sensors, get_station_data, get_station_history, StationLocationsView, DashboardOperatorMonitorView  # Asegúrate de importar esta función también
 )
 
 # Elimina esta línea redundante
@@ -29,6 +29,9 @@ urlpatterns = [
     path('dashboard/data-report/', DataReportView.as_view(), name='dashboard-data-report'),
     # Corrige esta línea para usar views en lugar de view
     path('dashboard/monitor/', DashboardMonitorView.as_view(), name='dashboard-monitor'),
+    #Dashboard para tecnicos con visualizacion multiescala
+    path('dashboard/monitor-tecnico/', DashboardOperatorMonitorView.as_view(), name='dashboard-monitor-tecnico'),
+
     
     # Corrige esta línea para usar views en lugar de view
     path('api/stations/<int:station_id>/sensors/', get_station_sensors, name='get_station_sensors'),

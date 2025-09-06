@@ -2,6 +2,8 @@ from django.db import models
 from django.conf import settings
 from django.utils.translation import gettext_lazy as _
 from CoreApps.users.models import Company
+from django.core.validators import RegexValidator
+
 
 class Station(models.Model):
     name = models.CharField(
@@ -264,7 +266,6 @@ class Sensor(models.Model):
     def __str__(self):
         return f"{self.name} - {self.station}"
 
-
 class SensorMaintenanceLog(models.Model):
     sensor = models.ForeignKey(
         Sensor,
@@ -296,3 +297,149 @@ class SensorMaintenanceLog(models.Model):
         verbose_name = _('registro de mantenimiento')
         verbose_name_plural = _('registros de mantenimiento')
         ordering = ['-maintenance_date']
+
+# =============================================================================
+# ALERT POLICY (solo almacenamiento + helper REL→ABS)
+# -----------------------------------------------------------------------------
+# Esta política guarda umbrales para que TU SERVICIO EXTERNO (MQTT u otro)
+# los consuma y aplique la lógica real (validación, precedencia, histéresis, etc.).
+#
+# Conceptos clave:
+# - scope:     "GLOBAL" | "COMPANY" | "SENSOR_TYPE" | "STATION" | "SENSOR"
+# - FKs:       company / sensor_type / station / sensor (todas opcionales aquí)
+# - alert_mode:"ABS" (absoluto, misma unidad del sensor) | "REL" (fracción 0..1)
+# - Umbrales:  warn_low, alert_low, warn_high, alert_high (todos opcionales)
+# - Opcional:  enable_low_thresholds, hysteresis, persistence_seconds
+# - Visual:    bands_active, color_warn, color_alert
+#
+# Nota importante:
+#   - Aquí NO imponemos validación de rangos ni precedencias.
+#   - El helper get_absolute_thresholds(sensor=...) te devuelve los valores
+#     ABSOLUTOS listos para usar; si alert_mode=REL, convierte con el rango
+#     [min_value, max_value] del sensor.
+# =============================================================================
+
+class AlertPolicy(models.Model):
+    class Scope(models.TextChoices):
+        GLOBAL = "GLOBAL", "Global"
+        COMPANY = "COMPANY", "Company"
+        SENSOR_TYPE = "SENSOR_TYPE", "Sensor Type"
+        STATION = "STATION", "Station"
+        SENSOR = "SENSOR", "Sensor"
+
+    class Mode(models.TextChoices):
+        ABS = "ABS", "Absoluto"
+        REL = "REL", "Relativo al rango"
+
+    scope = models.CharField(
+        max_length=20,
+        choices=Scope.choices,
+        default=Scope.SENSOR,
+        db_index=True,
+        help_text=_("Ámbito al que aplica esta política (la precedencia la decides en tu servicio externo)."),
+    )
+
+    # FKs opcionales: usa las que necesites según tu flujo
+    company = models.ForeignKey(
+        Company, on_delete=models.PROTECT, null=True, blank=True, related_name="alert_policies",
+        help_text=_("Vincular a una compañía (opcional).")
+    )
+    sensor_type = models.ForeignKey(
+        SensorType, on_delete=models.PROTECT, null=True, blank=True, related_name="alert_policies",
+        help_text=_("Vincular a un tipo de sensor (opcional).")
+    )
+    station = models.ForeignKey(
+        Station, on_delete=models.PROTECT, null=True, blank=True, related_name="alert_policies",
+        help_text=_("Vincular a una estación (opcional).")
+    )
+    sensor = models.ForeignKey(
+        Sensor, on_delete=models.PROTECT, null=True, blank=True, related_name="alert_policies",
+        help_text=_("Vincular a un sensor específico (opcional).")
+    )
+
+    alert_mode = models.CharField(
+        max_length=10,
+        choices=Mode.choices,
+        default=Mode.REL,
+        help_text=_("ABS: umbrales en unidades del sensor. REL: fracción 0..1 del rango [min,max] del sensor."),
+    )
+
+    # Umbrales (todos opcionales; tu servicio decide cómo interpretarlos)
+    warn_high  = models.FloatField(null=True, blank=True, help_text=_("Umbral de advertencia alto (amarillo)."))
+    alert_high = models.FloatField(null=True, blank=True, help_text=_("Umbral de alerta alto (rojo)."))
+
+    enable_low_thresholds = models.BooleanField(
+        default=False, help_text=_("Activa bandas bajas (warning/alert) para este alcance.")
+    )
+    warn_low   = models.FloatField(null=True, blank=True, help_text=_("Umbral de advertencia bajo (amarillo)."))
+    alert_low  = models.FloatField(null=True, blank=True, help_text=_("Umbral de alerta bajo (rojo)."))
+
+    # Parámetros opcionales de estabilidad (serán usados por tu servicio)
+    hysteresis = models.FloatField(null=True, blank=True, help_text=_("Margen para evitar parpadeo (opcional)."))
+    persistence_seconds = models.PositiveIntegerField(
+        null=True, blank=True, help_text=_("Segundos mínimos fuera de banda antes de notificar (opcional).")
+    )
+
+    # Visual y estado
+    bands_active = models.BooleanField(default=True, help_text=_("Permite desactivar esta política sin eliminarla."))
+
+    hex_validator = RegexValidator(
+        regex=r"^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$",
+        message=_("Use un color HEX válido, p. ej. #FFC107"),
+    )
+    color_warn  = models.CharField(max_length=9, null=True, blank=True, validators=[hex_validator],
+                                   help_text=_("Color para WARNING (ej. #FFC107)."))
+    color_alert = models.CharField(max_length=9, null=True, blank=True, validators=[hex_validator],
+                                   help_text=_("Color para ALERT (ej. #DC3545)."))
+
+    description = models.TextField(blank=True, help_text=_("Comentario opcional (quién/por qué)."))
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = _("política de umbrales")
+        verbose_name_plural = _("políticas de umbrales")
+        ordering = ["-updated_at"]
+        indexes = [
+            models.Index(fields=["scope"]),
+            models.Index(fields=["company"]),
+            models.Index(fields=["sensor_type"]),
+            models.Index(fields=["station"]),
+            models.Index(fields=["sensor"]),
+        ]
+
+    def __str__(self):
+        tgt = (self.sensor or self.station or self.sensor_type or self.company or "GLOBAL")
+        return f"{self.get_scope_display()} → {tgt}"
+
+    # ----------------------------- Helper principal ---------------------------
+    def get_absolute_thresholds(self, sensor=None):
+        """
+        Devuelve un dict con umbrales ABSOLUTOS (en unidades del sensor).
+        - Si alert_mode=ABS: retorna los valores tal cual.
+        - Si alert_mode=REL: convierte usando el rango [min_value, max_value].
+        - Si no se pasa 'sensor' y scope=SENSOR, usa self.sensor.
+        - Si no hay rango, usa [0, 1] para evitar errores.
+        """
+        s = sensor or self.sensor
+        smin = float(getattr(s, "min_value", 0.0) or 0.0)
+        smax = float(getattr(s, "max_value", 1.0) or 1.0)
+        span = max(0.0, smax - smin)
+
+        def conv(v):
+            if v is None:
+                return None
+            return float(v) if self.alert_mode == self.Mode.ABS else (smin + float(v) * span)
+
+        return {
+            "warn_low":   conv(self.warn_low),
+            "alert_low":  conv(self.alert_low),
+            "warn_high":  conv(self.warn_high),
+            "alert_high": conv(self.alert_high),
+            "hysteresis": conv(self.hysteresis) if self.hysteresis is not None else None,
+            "bands_active": self.bands_active,
+            "color_warn":  self.color_warn or "#FFC107",
+            "color_alert": self.color_alert or "#DC3545",
+            "mode": self.alert_mode,
+        }

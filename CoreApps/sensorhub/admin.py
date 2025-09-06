@@ -1,8 +1,8 @@
 from django.contrib import admin
 from django.utils.translation import gettext_lazy as _  # Añadimos esta importación
-from .models import Station, SensorType, Sensor, SensorMaintenanceLog, SensorSystem, DataSource
+from .models import Station, SensorType, Sensor, SensorMaintenanceLog, SensorSystem, DataSource, AlertPolicy
 from django.utils.html import format_html
-
+from django import forms
 
 class SensorInline(admin.TabularInline):
     model = Sensor
@@ -77,3 +77,49 @@ class MaintenanceLogAdmin(admin.ModelAdmin):
     list_display = ('sensor', 'maintenance_date', 'performed_by', 'next_maintenance')
     list_filter = ('maintenance_date', 'performed_by')
     search_fields = ('sensor__name', 'description', 'performed_by__email')
+
+
+
+class AlertPolicyForm(forms.ModelForm):
+    class Meta:
+        model = AlertPolicy
+        fields = "__all__"
+
+    class Media:
+        # JS sencillo para mostrar/ocultar low thresholds dinámicamente
+        js = ("admin/alertpolicy.js",)
+
+@admin.register(AlertPolicy)
+class AlertPolicyAdmin(admin.ModelAdmin):
+    form = AlertPolicyForm
+
+    list_display  = ("scope", "target_display", "alert_mode", "bands_active", "updated_at")
+    list_filter   = ("scope", "alert_mode", "bands_active", "company", "sensor_type", "station")
+    search_fields = ("description", "company__name", "sensor_type__name", "station__name", "sensor__name")
+    autocomplete_fields = ("company", "sensor_type", "station", "sensor")
+
+    fieldsets = (
+        (_("Ámbito y modo"), {
+            "fields": ("scope", ("company", "sensor_type", "station", "sensor"), "alert_mode", "bands_active"),
+            "description": _(
+                "<b>ABS</b>: umbrales en unidades del sensor. "
+                "<b>REL</b>: fracción 0..1 del rango [min,max] del sensor. "
+                "La conversión a absolutos la puedes hacer con <code>get_absolute_thresholds()</code>."
+            )
+        }),
+        (_("Umbrales altos"), {
+            "fields": (("warn_high", "alert_high"),),
+            "description": _("Valores opcionales para la banda amarilla/roja superior.")
+        }),
+        (_("Umbrales bajos (opcionales)"), {
+            "fields": ("enable_low_thresholds", ("warn_low", "alert_low")),
+            "description": _("Activa y define bandas bajas solo si lo necesitas en este alcance.")
+        }),
+        (_("Estabilidad y visual (opcionales)"), {
+            "fields": ("hysteresis", "persistence_seconds", ("color_warn", "color_alert"), "description"),
+        }),
+    )
+
+    def target_display(self, obj):
+        return obj.sensor or obj.station or obj.sensor_type or obj.company or "GLOBAL"
+    target_display.short_description = "Objetivo"

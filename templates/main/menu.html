@@ -139,11 +139,16 @@
 						            </li>
 						
 						            <!--Menu list item-->
-						            <li {% if title == 'Monitor' %}class="active-sub"{% endif %}>
-						                <a href="{% url 'dashboard-monitor'%}">
+						            <li>
+						                <a href="#">
 						                    <i class="demo-psi-monitor-2"></i>
 						                    <span class="menu-title">Monitor</span>
+                                            <i class="arrow"></i>
 						                </a>
+                                        <ul class="collapse"> 
+                                            <li {% if title == 'Monitor' %}class="active-sub"{% endif %}><a href="{% url 'dashboard-monitor'%}">Monitor simple</a></li>
+                                            <li {% if title == 'Monitor Multiescala' %}class="active-sub"{% endif %}><a href="{% url 'dashboard-monitor-tecnico'%}">Monitor Multiescala</a></li>
+						                </ul>
 						            </li>
 						            
 						            <!--Menu list item-->

@@ -204,6 +204,26 @@ class DashboardMonitorView(LoginRequiredMixin, TemplateView):
     #    context['stations'] = stations
     #    return context
 
+class DashboardOperatorMonitorView(LoginRequiredMixin, TemplateView):
+    """
+    Vista de monitoreo multiescala (técnica) para operadores.
+    - Conserva selector de estación y chips de rango (5m, 30m, 1h, 3h, 6h, 12h)
+    - Un solo gráfico con múltiples ejes Y (uno por sensor), ordenados por 'site'
+    - Panel derecho con último valor en vivo
+    - Tiempo real por MQTT con tópico /<Estacion>/<Sensor>/
+    """
+    template_name = 'main/dashboard/monitor_tecnico.html'
+    login_url = 'login'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        user = self.request.user
+        stations = Station.objects.filter(related_users=user)
+        context['title'] = "Monitor Multiescala"
+        context['stations'] = stations
+        context['mqtt_broker_ip'] = settings.MQTT_BROKER_IP
+        context['mqtt_broker_port'] = settings.MQTT_BROKER_PORT
+        return context
 
 def get_sensors_for_station(request, station_id):
     sensors = Sensor.objects.filter(station_id=station_id, is_active=True)
@@ -235,6 +255,9 @@ def get_station_sensors(request, station_id):
                 'type': sensor.sensor_type.name,   # Corregido: usar sensor_type.name
                 'min_value': sensor.min_value,
                 'max_value': sensor.max_value,
+                'site': getattr(sensor, 'site', None),
+                'color': getattr(sensor, 'color', None),
+                'topic': sensor.name, 
             })
         
         return JsonResponse({

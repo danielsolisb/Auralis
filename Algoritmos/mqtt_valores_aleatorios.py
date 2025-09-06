@@ -31,18 +31,21 @@ def make_topic(station: str, sensor: str) -> str:
 # Sensores a publicar (nombre_de_sensor -> función generadora)
 # Ajusta los rangos a tu gusto.
 def gen_current():          # A
-    return f"{random.uniform(20, 40):.2f}"
+    return f"{random.uniform(20, 25):.2f}"
 
 def gen_pressure_1k():      # PSI ~ 0..1000
-    return f"{random.uniform(400, 1000):.2f}"
+    return f"{random.uniform(400, 410):.2f}"
+
+def gen_pressure_2k():      # PSI ~ 0..1000
+    return f"{random.uniform(700, 710):.2f}"
 
 def gen_frequency():        # Hz
-    return f"{random.uniform(0, 100):.2f}"
+    return f"{random.uniform(40, 46):.2f}"
 
 SENSORS = OrderedDict([
     ("Motor_Current",            gen_current),
     ("Pump_Discharge_Pressure",  gen_pressure_1k),
-    ("Pump_Intake_Pressure",     gen_pressure_1k),
+    ("Pump_Intake_Pressure",     gen_pressure_2k),
     ("VFD_Output_Frecuency",     gen_frequency),
 ])
 

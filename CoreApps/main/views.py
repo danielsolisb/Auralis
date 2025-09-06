@@ -412,46 +412,6 @@ def get_station_data(request):
     })
 
 
-#@login_required
-#def get_station_data(request):
-#    station_id = request.GET.get('station_id')
-#    start_str = request.GET.get('start_date')  # Esto llega con formato "YYYY-MM-DDTHH:mm"
-#    end_str = request.GET.get('end_date')      # Ej: "2025-03-21T08:30"
-#
-#    # 1. Validar que los parámetros existan
-#    if not station_id or not start_str or not end_str:
-#        return JsonResponse({'error': 'Faltan parámetros: station_id, start_date y end_date'}, status=400)
-#
-#    # 2. Intentar parsear las fechas usando fromisoformat
-#    try:
-#        start_dt = datetime.fromisoformat(start_str)
-#        end_dt = datetime.fromisoformat(end_str)
-#    except ValueError:
-#        return JsonResponse({'error': 'Formato de fecha/hora inválido. Use YYYY-MM-DDTHH:MM'}, status=400)
-#
-#    # 3. Verificar que la estación pertenezca al usuario, etc.
-#    try:
-#        station = Station.objects.get(id=station_id, related_users=request.user)
-#    except Station.DoesNotExist:
-#        return JsonResponse({'error': 'Estación no encontrada'}, status=404)
-#
-#    # 4. Filtrar mediciones (Measurement) en ese rango de fechas
-#    sensor_data = []
-#    for sensor in station.sensors.all():
-#        measurements_qs = sensor.measurements.filter(timestamp__range=[start_dt, end_dt]).order_by('timestamp')
-#        readings = list(measurements_qs.values('timestamp', 'value', 'is_valid'))
-#
-#        sensor_data.append({
-#            'sensor_id': sensor.id,
-#            'sensor_name': sensor.name,
-#            'readings': readings
-#        })
-#
-#    return JsonResponse({
-#        'station_name': station.name,
-#        'sensors': sensor_data
-#    })
-
 class DataHistoryView(LoginRequiredMixin, TemplateView):
     template_name = 'main/dashboard/data_history.html'
     login_url = 'login'
@@ -463,14 +423,7 @@ class DataHistoryView(LoginRequiredMixin, TemplateView):
         context['title'] = "Data History"
         context['subtitle'] = "Histórico de Datos"
         return context
-#class DataHistoryView(LoginRequiredMixin, TemplateView):
-#    template_name = 'main/dashboard/data_history.html'
-#    login_url = 'login'
-#    def get_context_data(self, **kwargs):
-#        context = super().get_context_data(**kwargs)
-#        context['title']= "Data History"
-#        context['subtitle']= "Data History"
-#        return context
+
 
 class DataReportView(LoginRequiredMixin, TemplateView):
     template_name = 'main/dashboard/data_report.html'

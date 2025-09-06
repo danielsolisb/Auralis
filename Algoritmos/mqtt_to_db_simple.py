@@ -6,12 +6,11 @@ import json
 import time
 import signal
 import logging
-from datetime import datetime, timezone as dt_timezone
+from datetime import datetime
 from typing import Dict, Tuple, Optional
 
 import pymysql
 from paho.mqtt.client import Client as MqttClient
-from dateutil.parser import isoparse
 from zoneinfo import ZoneInfo  # Python 3.9+
 
 # ================== CONFIG ==================
@@ -35,7 +34,7 @@ logging.basicConfig(
     level=os.environ.get("LOGLEVEL", "INFO").upper(),
     format="%(asctime)s | %(levelname)s | %(message)s"
 )
-log = logging.getLogger("mqtt_to_db_local")
+log = logging.getLogger("mqtt_to_db_local_now")
 
 SQL_SENSORS_ALL = """
 SELECT st.name AS station_name, s.name AS sensor_name,
@@ -49,9 +48,9 @@ if ONLY_ACTIVE:
 else:
     SQL_SENSORS_ALL += ";"
 
-# OJO: medimos en 'timestamp' y SIN is_valid (lo eliminaste)
+# INSERT en measured_at (NO 'timestamp', NO 'is_valid')
 SQL_INSERT = """
-INSERT INTO measurements_measurement (sensor_id, `timestamp`, value)
+INSERT INTO measurements_measurement (sensor_id, measured_at, value)
 VALUES (%s, %s, %s);
 """
 
@@ -91,59 +90,30 @@ def now_local_naive() -> datetime:
     """Devuelve ahora en hora local, naive (sin tzinfo)."""
     return datetime.now(LOCAL_TZ).replace(tzinfo=None)
 
-def to_local_naive_from_any(dt_any: datetime | None) -> datetime:
+def parse_value(payload: str) -> Optional[float]:
     """
-    Convierte un datetime cualquiera (naive/aware, utc/local) a LOCAL naive.
-    Si viene None, usa ahora local.
-    """
-    if dt_any is None:
-        return now_local_naive()
-    if dt_any.tzinfo is None:
-        # asumimos que un dt naive del payload es LOCAL (decisión de negocio)
-        return dt_any
-    # si vino aware, lo pasamos a local y lo dejamos naive
-    return dt_any.astimezone(LOCAL_TZ).replace(tzinfo=None)
-
-def parse_payload(payload: str):
-    """
-    Devuelve (value: float|None, ts_local_naive: datetime).
+    Devuelve solo el valor numérico.
+    Siempre usaremos 'now_local_naive()' como timestamp de inserción.
     Acepta:
-      - número simple: "123.45"  -> ahora local
-      - JSON: {"value": 123.45, "ts": "2025-09-03T20:40:15Z" }  -> usa 'ts'
-              (si 'ts' no tiene tz, lo tomamos como LOCAL)
+      - "123.45"
+      - JSON: {"value": 123.45, ...}
     """
     payload = (payload or "").strip()
-
     # JSON
     try:
         obj = json.loads(payload)
         if isinstance(obj, (int, float)):
-            return float(obj), now_local_naive()
+            return float(obj)
         if isinstance(obj, dict) and "value" in obj:
-            v = float(obj["value"])
-            ts = obj.get("ts")
-            if ts:
-                # soporta ISO con Z/offset o sin tz (local)
-                if isinstance(ts, str):
-                    s = ts.strip()
-                    if s.endswith("Z"):
-                        s = s[:-1] + "+00:00"
-                    try:
-                        dt = datetime.fromisoformat(s)
-                    except Exception:
-                        dt = isoparse(ts)
-                else:
-                    dt = None
-                return v, to_local_naive_from_any(dt)
-            return v, now_local_naive()
+            return float(obj["value"])
     except Exception:
         pass
-
     # número simple
     try:
-        return float(payload.replace(",", ".")), now_local_naive()
+        return float(payload.replace(",", "."))
     except Exception:
-        return None, now_local_naive()
+        return None
+
 
 def main():
     db = DB()
@@ -153,48 +123,65 @@ def main():
     else:
         log.info("Sensores cargados: %d", len(rows))
 
-    # topic -> (sensor_id, mn, mx)  (para validaciones futuras si quieres)
+    # topic normalizado -> (sensor_id, mn, mx)  (mn/mx por si luego validas)
     topic_to_sid: Dict[str, Tuple[int, Optional[float], Optional[float]]] = {}
-    subs = []
+    subs: list[str] = []
+
+    # Normalizador de tópico para lookup
+    def norm(t: str) -> str:
+        return t.strip("/").lower()
 
     for r in rows:
         station = r["station_name"].strip()
         sensor  = r["sensor_name"].strip()
         sid, mn, mx = db.map[(station.lower(), sensor.lower())]
 
-        t1 = f"{station}/{sensor}/"
-        t2 = f"{station}/{sensor}"
-        topic_to_sid[t1.rstrip("/").lower()] = (sid, mn, mx)
-        topic_to_sid[t2.rstrip("/").lower()] = (sid, mn, mx)
-        subs.append(t1)
+        # Suscribir a TODAS las variantes para evitar misses:
+        variants = [
+            f"{station}/{sensor}",
+            f"{station}/{sensor}/",
+            f"/{station}/{sensor}",
+            f"/{station}/{sensor}/",
+        ]
+        for vt in variants:
+            key = norm(vt)
+            topic_to_sid[key] = (sid, mn, mx)
+            subs.append(vt)
 
-    client = MqttClient(client_id=f"ingestor_local_{os.getpid()}", transport="websockets")
+    client = MqttClient(client_id=f"ingestor_local_now_{os.getpid()}", transport="websockets")
     client.ws_set_options(path=MQTT_WS_PATH)
 
     def on_connect(cli, userdata, flags, rc):
         if rc == 0:
-            log.info("MQTT conectado. Suscribiendo %d tópicos…", len(subs))
+            # Suscribir todas las variantes (duplicados no dañan; el broker lo maneja)
+            uniq = []
+            seen = set()
             for t in subs:
+                if t not in seen:
+                    uniq.append(t)
+                    seen.add(t)
+            for t in uniq:
                 cli.subscribe(t, qos=0)
-            for t in subs:
-                cli.subscribe(t.rstrip("/"), qos=0)
+            log.info("MQTT conectado. Suscritos %d tópicos.", len(uniq))
         else:
             log.error("Error conectando MQTT rc=%s", rc)
 
     def on_message(cli, userdata, msg):
-        info = topic_to_sid.get(msg.topic.rstrip("/").lower())
+        key = norm(msg.topic)
+        info = topic_to_sid.get(key)
         if not info:
             return
         sensor_id, mn, mx = info
         try:
-            payload = msg.payload.decode("utf-8")
+            payload = msg.payload.decode("utf-8", errors="ignore")
         except Exception:
             return
 
-        value, ts_local = parse_payload(payload)
+        value = parse_value(payload)
         if value is None:
             return
 
+        ts_local = now_local_naive()   # <<< SIEMPRE AHORA LOCAL
         try:
             db.insert_measurement(sensor_id, ts_local, value)
         except Exception as e:

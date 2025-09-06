@@ -55,6 +55,7 @@ class SignUpView(CreateView):
 #        context['subtitle']= "Dashboard"
 #        context['user'] = self.request.user
 #        return context
+
 class DashboardView(LoginRequiredMixin, TemplateView):
     template_name = 'main/dashboard/main_dashboard.html'
     login_url = 'login'
@@ -62,34 +63,28 @@ class DashboardView(LoginRequiredMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         user = self.request.user
-        # Obtén las estaciones asociadas al usuario
+
         stations = Station.objects.filter(related_users=user)
         context['stations'] = stations
-        
-        # Cuenta de estaciones activas
         context['active_count'] = stations.filter(is_active=True).count()
-        
-        # Obtén los IDs de todos los sensores de las estaciones del usuario
+
         sensor_ids = []
         for station in stations:
             sensor_ids.extend(list(station.sensors.values_list('id', flat=True)))
-        
-        # Advertencias: se cuentan aquellas no reconocidas
+
         context['warning_count'] = Warning.objects.filter(sensor_id__in=sensor_ids, acknowledged=False).count()
-        # Alarmas: se cuentan las que están activas
         context['alarm_count'] = Alarm.objects.filter(sensor_id__in=sensor_ids, is_active=True).count()
 
-        # Prepara una lista con los datos por estación, incluyendo sus sensores y el último registro (Measurement)
         station_data = []
         for station in stations:
             sensors_list = []
             for sensor in station.sensors.all():
-                last_measurement = sensor.measurements.order_by('-timestamp').first()
+                last_measurement = sensor.measurements.order_by('-measured_at').first()
                 sensors_list.append({
                     'id': sensor.id,
                     'name': sensor.name,
                     'last_value': last_measurement.value if last_measurement else None,
-                    'last_timestamp': last_measurement.timestamp if last_measurement else None,
+                    'last_timestamp': last_measurement.measured_at if last_measurement else None,
                 })
             station_data.append({
                 'id': station.id,
@@ -97,9 +92,8 @@ class DashboardView(LoginRequiredMixin, TemplateView):
                 'is_active': station.is_active,
                 'sensors': sensors_list,
             })
-        context['station_data'] = station_data
 
-        # Otros datos de contexto (título, subtítulo, etc.)
+        context['station_data'] = station_data
         context['title'] = "Dashboard"
         context['subtitle'] = "Dashboard"
         context['user'] = user
@@ -116,44 +110,31 @@ class DashboardMapView(LoginRequiredMixin, TemplateView):
         return context
 
 class StationLocationsView(LoginRequiredMixin, View):
-    """
-    Devuelve las estaciones visibles para el usuario autenticado, junto con:
-      - is_active de la estación
-      - conteo de sensores (total y activos)
-      - último valor por sensor (value + timestamp + unidad)
-    """
     login_url = 'login'
 
     def get(self, request, *args, **kwargs):
         user = request.user
 
-        # Estaciones visibles para el usuario
         qs = Station.objects.filter(is_active=True)
         if not user.is_superuser:
-            qs = qs.filter(
-                Q(company=user.company) | Q(related_users=user)
-            ).distinct()
+            qs = qs.filter(Q(company=user.company) | Q(related_users=user)).distinct()
 
-        # Solo con coordenadas
         qs = qs.exclude(latitude__isnull=True).exclude(longitude__isnull=True)
 
-        # Sensores de las estaciones visibles
         sensors_qs = Sensor.objects.select_related('sensor_type', 'station') \
                                    .filter(station__in=qs)
 
-        # Subqueries para anotar el último valor/ts por sensor
-        last_meas = Measurement.objects.filter(sensor=OuterRef('pk')).order_by('-timestamp')
+        from CoreApps.measurements.models import Measurement
+        last_meas = Measurement.objects.filter(sensor=OuterRef('pk')).order_by('-measured_at')
         sensors_qs = sensors_qs.annotate(
             last_value=Subquery(last_meas.values('value')[:1]),
-            last_ts=Subquery(last_meas.values('timestamp')[:1])
+            last_ts=Subquery(last_meas.values('measured_at')[:1])
         )
 
-        # Agrupar por estación en Python (evitamos N+1)
         sensors_by_station = {}
         for s in sensors_qs:
             sensors_by_station.setdefault(s.station_id, []).append(s)
 
-        # Serializar estaciones + datos
         stations_data = []
         for st in qs.select_related('company'):
             sensor_list = sensors_by_station.get(st.id, [])
@@ -183,6 +164,7 @@ class StationLocationsView(LoginRequiredMixin, View):
             })
 
         return JsonResponse({"stations": stations_data})
+
 
 class DashboardDataView(LoginRequiredMixin, TemplateView):
     template_name = 'main/dashboard/data.html'
@@ -267,12 +249,9 @@ def get_station_sensors(request, station_id):
 
 @login_required
 def get_station_history(request, station_id):
-    # Escalas soportadas: 1m, 5m, 30m, 1h, 3h, 6h, 12h
-    timescale = request.GET.get('timescale', '5m')  # por defecto 5 minutos
+    timescale = request.GET.get('timescale', '5m')
     now = timezone.now()
 
-    # Mapeo sencillo
-    M = 60  # segundos por minuto, solo para legibilidad si quisieras usarlo
     if timescale == '1m':
         start_time = now - timedelta(minutes=1)
     elif timescale == '5m':
@@ -288,27 +267,24 @@ def get_station_history(request, station_id):
     elif timescale == '12h':
         start_time = now - timedelta(hours=12)
     else:
-        # fallback conservador
         start_time = now - timedelta(minutes=5)
 
     try:
-        # Valida acceso
         station = Station.objects.get(id=station_id, related_users=request.user)
 
-        # Histórico crudo de TODOS los sensores de la estación dentro del rango
+        from CoreApps.measurements.models import Measurement
         measurements = (
             Measurement.objects
-            .filter(sensor__station=station, timestamp__gte=start_time)
-            .order_by('timestamp')
-            .values('sensor_id', 'timestamp', 'value')
+            .filter(sensor__station=station, measured_at__gte=start_time)
+            .order_by('measured_at')
+            .values('sensor_id', 'measured_at', 'value')
         )
 
-        # ECharts: { sensor_id: [[tsISO, value], ...] }
         history_data = {}
         for m in measurements:
             sid = m['sensor_id']
             history_data.setdefault(sid, []).append([
-                m['timestamp'].isoformat(),
+                m['measured_at'].isoformat(),
                 float(m['value']),
             ])
 
@@ -316,6 +292,7 @@ def get_station_history(request, station_id):
 
     except Station.DoesNotExist:
         return JsonResponse({'error': 'Estación no encontrada'}, status=404)
+
 
 class DashboardSettingsView(LoginRequiredMixin, TemplateView):
     template_name = 'main/dashboard/settings.html'
@@ -352,8 +329,8 @@ class StationDataView(LoginRequiredMixin, TemplateView):
 @login_required
 def get_station_data(request):
     station_id = request.GET.get('station_id')
-    start_str = request.GET.get('start_date')  # Formato "YYYY-MM-DDTHH:mm"
-    end_str = request.GET.get('end_date')      # Formato "YYYY-MM-DDTHH:mm"
+    start_str = request.GET.get('start_date')
+    end_str = request.GET.get('end_date')
 
     if not station_id or not start_str or not end_str:
         return JsonResponse({'error': 'Faltan parámetros: station_id, start_date y end_date'}, status=400)
@@ -370,30 +347,39 @@ def get_station_data(request):
         return JsonResponse({'error': 'Estación no encontrada'}, status=404)
 
     sensor_data = []
-    from CoreApps.events.models import Alarm, Warning  # Asegúrate de importar estos modelos
+    from CoreApps.events.models import Alarm, Warning
+
     for sensor in station.sensors.all():
-        measurements_qs = sensor.measurements.filter(timestamp__range=[start_dt, end_dt]).order_by('timestamp')
-        readings = list(measurements_qs.values('timestamp', 'value', 'is_valid'))
+        qs = sensor.measurements.filter(measured_at__range=[start_dt, end_dt]).order_by('measured_at')
+        raw = list(qs.values('measured_at', 'value'))
+
+        # Aliasing para compatibilidad: devolver 'timestamp'
+        readings = []
+        for r in raw:
+            readings.append({
+                'timestamp': r['measured_at'],
+                'value': r['value'],
+            })
+
         summary = {}
         if readings:
             values = [r['value'] for r in readings]
-            max_val = max(values)
-            min_val = min(values)
-            avg_val = sum(values) / len(values)
-            # Obtener el primer registro que tiene el valor máximo y mínimo
+            max_val = max(values); min_val = min(values); avg_val = sum(values) / len(values)
             max_reading = next(r for r in readings if r['value'] == max_val)
             min_reading = next(r for r in readings if r['value'] == min_val)
-            summary['max_value'] = max_val
-            summary['min_value'] = min_val
-            summary['avg_value'] = avg_val
-            summary['max_timestamp'] = max_reading['timestamp']
-            summary['min_timestamp'] = min_reading['timestamp']
+            summary.update({
+                'max_value': max_val,
+                'min_value': min_val,
+                'avg_value': avg_val,
+                'max_timestamp': max_reading['timestamp'],
+                'min_timestamp': min_reading['timestamp'],
+            })
         else:
-            summary['max_value'] = None
-            summary['min_value'] = None
-            summary['avg_value'] = None
-            summary['max_timestamp'] = None
-            summary['min_timestamp'] = None
+            summary.update({
+                'max_value': None, 'min_value': None, 'avg_value': None,
+                'max_timestamp': None, 'min_timestamp': None,
+            })
+
         alarm_count = Alarm.objects.filter(sensor=sensor, timestamp__range=[start_dt, end_dt]).count()
         warning_count = Warning.objects.filter(sensor=sensor, timestamp__range=[start_dt, end_dt]).count()
         summary['total_alarms'] = alarm_count
@@ -410,6 +396,7 @@ def get_station_data(request):
         'station_name': station.name,
         'sensors': sensor_data
     })
+
 
 
 class DataHistoryView(LoginRequiredMixin, TemplateView):

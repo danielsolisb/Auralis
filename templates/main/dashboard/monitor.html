@@ -226,76 +226,76 @@ $(function () {
   // CARGA ESTACIÓN + HISTÓRICO
   // ============================
   function fetchAndRenderUnifiedChart(stationId) {
-    unsubscribeFromAllTopics();
+  unsubscribeFromAllTopics();
 
-    // reset
-    currentStationId = stationId;
-    sensorMetadata = {}; sensorIndexById = {}; seriesBuffers = {};
-    currentSensorIds = []; activeAxisIndex = null;
-    unifiedChart.clear(); valuesPanel.empty();
-    isLiveMode = true;
-    setLiveUI(true);
+  // reset
+  currentStationId = stationId;
+  sensorMetadata = {}; sensorIndexById = {}; seriesBuffers = {};
+  currentSensorIds = []; activeAxisIndex = null;
+  unifiedChart.clear(); valuesPanel.empty();
+  isLiveMode = true;
+  setLiveUI(true);
 
-    $.getJSON(`/api/stations/${stationId}/sensors/`, function (response) {
-      if (!response.sensors || response.sensors.length === 0) return;
+  $.getJSON(`/api/stations/${stationId}/sensors/`, function (response) {
+    if (!response.sensors || response.sensors.length === 0) return;
 
-      currentStationName = response.station_name;
-      $('#chart-panel-title').text(`Monitor en Tiempo Real - ${currentStationName}`);
+    currentStationName = response.station_name;
+    $('#chart-panel-title').text(`Monitor en Tiempo Real - ${currentStationName}`);
 
-      currentSensorIds = response.sensors.map(s => s.id);
-      response.sensors.forEach((s, i) => {
-        sensorMetadata[s.id] = s;
-        sensorIndexById[s.id] = i;
-        seriesBuffers[s.id] = [];
-        // tarjetas
-        valuesPanel.append(`
-          <div class="live-card" id="live-card-${s.id}">
-            <span class="name">${s.name}</span>
-            <span><span class="val" id="value-display-${s.id}">--</span>
-            <span class="unit">${s.unit || ''}</span></span>
-          </div>`);
-      });
-
-      // Construir chart y setear opción base
-      const option = buildUnifiedChartOption(response.sensors);
-      unifiedChart.setOption(option, true);
-
-      // Detectar grilla activa para tooltip mixto (si lo estás usando)
-      unifiedChart.off('updateAxisPointer');
-      unifiedChart.on('updateAxisPointer', function (e) {
-        if (e.axesInfo && e.axesInfo.length) activeAxisIndex = e.axesInfo[0].axisIndex;
-      });
-
-      // Eventos para pausar/reanudar vivo según el slider
-      unifiedChart.off('dataZoom');
-      unifiedChart.on('dataZoom', function(){
-        // tomamos el slider (el segundo dataZoom que es "slider")
-        const opt = unifiedChart.getOption();
-        const dz = (opt.dataZoom && opt.dataZoom.length > 1) ? opt.dataZoom[1] : null;
-        if (!dz) return;
-        // Si el extremo derecho está “casi” al 100%, consideramos vivo.
-        const atRight = (typeof dz.end === 'number') ? (dz.end > 99) : true;
-        setLiveUI(atRight);
-        isLiveMode = atRight;
-      });
-
-      // Suscripciones MQTT
-      response.sensors.forEach(sensor => {
-        const topic = `${currentStationName}/${sensor.name}/`;
-        subscribeToTopic(topic);
-      });
-
-      // Cargar histórico PARA EL RANGO ACTUAL (5m por defecto)
-      requestHistory(currentRange);
-
-      // Chips
-      initRangeChips();
-
-      // Resize
-      setTimeout(() => unifiedChart.resize(), 0);
-      $(window).off('resize._auralis').on('resize._auralis', () => unifiedChart.resize());
+    currentSensorIds = response.sensors.map(s => s.id);
+    response.sensors.forEach((s, i) => {
+      sensorMetadata[s.id] = s;
+      sensorIndexById[s.id] = i;
+      seriesBuffers[s.id] = [];
+      // tarjetas
+      valuesPanel.append(`
+        <div class="live-card" id="live-card-${s.id}">
+          <span class="name">${s.name}</span>
+          <span><span class="val" id="value-display-${s.id}">--</span>
+          <span class="unit">${s.unit || ''}</span></span>
+        </div>`);
     });
-  }
+
+    // Construir chart y setear opción base
+    const option = buildUnifiedChartOption(response.sensors);
+    unifiedChart.setOption(option, true);
+
+    // Detectar grilla activa para tooltip mixto (si lo estás usando)
+    unifiedChart.off('updateAxisPointer');
+    unifiedChart.on('updateAxisPointer', function (e) {
+      if (e.axesInfo && e.axesInfo.length) activeAxisIndex = e.axesInfo[0].axisIndex;
+    });
+
+    // Eventos para pausar/reanudar vivo según el slider
+    unifiedChart.off('dataZoom');
+    unifiedChart.on('dataZoom', function(){
+      // tomamos el slider (el segundo dataZoom que es "slider")
+      const opt = unifiedChart.getOption();
+      const dz = (opt.dataZoom && opt.dataZoom.length > 1) ? opt.dataZoom[1] : null;
+      if (!dz) return;
+      // Si el extremo derecho está “casi” al 100%, consideramos vivo.
+      const atRight = (typeof dz.end === 'number') ? (dz.end > 99) : true;
+      setLiveUI(atRight);
+      isLiveMode = atRight;
+    });
+
+    // 🔁 SUSCRIPCIÓN ÚNICA POR ESTACIÓN (wildcard): "/Estacion/+/"
+    const stationWildcard = `/${currentStationName}/+/`;
+    subscribeToTopic(stationWildcard);
+
+    // Cargar histórico PARA EL RANGO ACTUAL (5m por defecto)
+    requestHistory(currentRange);
+
+    // Chips
+    initRangeChips();
+
+    // Resize
+    setTimeout(() => unifiedChart.resize(), 0);
+    $(window).off('resize._auralis').on('resize._auralis', () => unifiedChart.resize());
+  });
+}
+
+
 
   function initRangeChips(){
     chipsWrap.find('.chip').removeClass('active');
@@ -510,23 +510,31 @@ function buildUnifiedChartOption(sensors) {
   // ============================
   // MQTT → actualizar + ventana móvil
   // ============================
-  function onMessageArrived(message) {
-    const topic = message.destinationName;  // "Station/Sensor/"
-    const payload = message.payloadString;
+ function onMessageArrived(message) {
+  const rawTopic = message.destinationName;   // p.ej. "/Estacion/Sensor/" o "Estacion/Sensor/"
+  const payload  = message.payloadString;
 
-    const parts = topic.slice(0, -1).split('/');
-    if (parts.length < 2) return;
-    if (parts[0] !== currentStationName) return;
+  // Normaliza: quita slashes de inicio/fin y divide
+  const cleaned = rawTopic.replace(/^\/+|\/+$/g, ''); // "/A/B/" -> "A/B"
+  const parts   = cleaned.split('/');                 // ["Estacion","Sensor",...]
+  if (parts.length < 2) return;
 
-    const sensorName = parts[1];
-    const sensor = Object.values(sensorMetadata).find(s => s.name === sensorName);
-    if (!sensor) return;
+  const stationFromTopic = parts[0];
+  const sensorFromTopic  = parts[1];
 
-    const val = parseFloat(payload);
-    if (Number.isNaN(val)) return;
+  // Debe coincidir con la estación actualmente seleccionada
+  if (stationFromTopic !== currentStationName) return;
 
-    updateChartData(sensor.id, val);
-  }
+  // Busca sensor por nombre de los cargados vía API
+  const sensor = Object.values(sensorMetadata).find(s => s.name === sensorFromTopic);
+  if (!sensor) return;
+
+  const val = parseFloat(payload);
+  if (Number.isNaN(val)) return;
+
+  updateChartData(sensor.id, val);
+}
+
 
   function updateChartData(sensorId, value) {
     const now = new Date();

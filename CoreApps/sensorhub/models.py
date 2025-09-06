@@ -126,10 +126,46 @@ class SensorType(models.Model):
         _('unidad de medida'),
         max_length=20
     )
-    
     class Meta:
         verbose_name = _('tipo de sensor')
         verbose_name_plural = _('tipos de sensores')
+
+    def __str__(self):
+        return self.name
+
+class SensorSystem(models.Model):
+    name = models.CharField(_('nombre'), max_length=80, unique=True)
+    slug = models.SlugField(_('slug'), max_length=80, unique=True)
+    description = models.TextField(_('descripción'), blank=True)
+    color = models.CharField(
+        _('color'), max_length=20, blank=True, null=True,
+        help_text=_('Color CSS/HEX para identificar el sistema (opc.)')
+    )
+    is_active = models.BooleanField(_('activo'), default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = _('sistema/origen')
+        verbose_name_plural = _('sistemas/orígenes')
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name
+
+# --- NUEVO: tabla de fuentes de datos ---
+class DataSource(models.Model):
+    name = models.CharField(_('nombre'), max_length=80, unique=True)   # p.ej. MQTT, Modbus, Derivado
+    slug = models.SlugField(_('slug'), max_length=80, unique=True)
+    description = models.TextField(_('descripción'), blank=True)
+    is_active = models.BooleanField(_('activo'), default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = _('fuente de datos')
+        verbose_name_plural = _('fuentes de datos')
+        ordering = ['name']
 
     def __str__(self):
         return self.name
@@ -150,6 +186,20 @@ class Sensor(models.Model):
         on_delete=models.PROTECT,
         related_name='sensors',
         verbose_name=_('tipo de sensor')
+    )
+    system = models.ForeignKey(
+        SensorSystem,
+        on_delete=models.PROTECT,
+        related_name='sensors',
+        null=True, blank=True,
+        verbose_name=_('sistema/origen')
+    )
+    source = models.ForeignKey(
+        DataSource,
+        on_delete=models.PROTECT,
+        related_name='sensors',
+        null=True, blank=True,
+        verbose_name=_('fuente de datos')
     )
     configuration = models.JSONField(
         _('configuración'),
@@ -177,6 +227,19 @@ class Sensor(models.Model):
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    color = models.CharField(
+        _('color'),
+        max_length=20,
+        blank=True,
+        null=True,
+        help_text=_('Color CSS o HEX, p. ej. #FF8800')
+    )
+    site = models.CharField(
+        _('sitio'),
+        max_length=100,
+        blank=True,
+        null=True
+    )
     min_value = models.FloatField(
         _('valor mínimo'),
         null=True,
@@ -189,14 +252,18 @@ class Sensor(models.Model):
         blank=True,
         help_text=_('Valor máximo aceptable para este sensor')
     )
-
     class Meta:
         verbose_name = _('sensor')
         verbose_name_plural = _('sensores')
         ordering = ['station', 'name']
+        indexes = [
+            models.Index(fields=['station', 'system']),
+            models.Index(fields=['station', 'source']),
+        ]
 
     def __str__(self):
         return f"{self.name} - {self.station}"
+
 
 class SensorMaintenanceLog(models.Model):
     sensor = models.ForeignKey(

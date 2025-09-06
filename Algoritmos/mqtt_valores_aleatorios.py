@@ -3,73 +3,88 @@
 
 import time
 import random
+from collections import OrderedDict
 from datetime import datetime
 import paho.mqtt.client as mqtt
 
+# ========================
+# Config broker
+# ========================
 BROKER_HOST = "34.30.17.212"
-BROKER_PORT = 8081            # WebSocket típicamente en 8081
-USE_WEBSOCKET = True          # Usaremos WebSocket porque el puerto es 8081
+BROKER_PORT = 8081                 # WebSocket en 8081
+USE_WEBSOCKET = True               # usar WS
 KEEPALIVE = 60
 
-TOPIC_FLOW    = "Sacha53/Flow/"
-TOPIC_PCASING = "Sacha53/PCasing/"
-TOPIC_PTUBING = "Sacha53/Ptubing/"
-TOPIC_FRECUENCY = "Sacha53/VSDTargetFreq/"
-TOPIC_PRESSUREINTAKE = "Sacha53/DHIntakePressure/" 
-TOPIC_TEMP_MOT = "Sacha53/DHMotorTemp/" 
-TOPIC_AMPER = "Sacha53/Amperimetro/" 
+# Si tu broker WS requiere un path (p.ej. "/mqtt"), descomenta:
+WS_PATH = None
+# WS_PATH = "/mqtt"
 
+# ========================
+# Config tópicos
+# ========================
+STATION = "Sacha53"                # nombre de estación
+
+def make_topic(station: str, sensor: str) -> str:
+    """Devuelve /<station>/<sensor>/ con slash inicial y final."""
+    return f"/{station}/{sensor}/"
+
+# Sensores a publicar (nombre_de_sensor -> función generadora)
+# Ajusta los rangos a tu gusto.
+def gen_current():          # A
+    return f"{random.uniform(20, 40):.2f}"
+
+def gen_pressure_1k():      # PSI ~ 0..1000
+    return f"{random.uniform(400, 1000):.2f}"
+
+def gen_frequency():        # Hz
+    return f"{random.uniform(0, 100):.2f}"
+
+SENSORS = OrderedDict([
+    ("Motor_Current",            gen_current),
+    ("Pump_Discharge_Pressure",  gen_pressure_1k),
+    ("Pump_Intake_Pressure",     gen_pressure_1k),
+    ("VFD_Output_Frecuency",     gen_frequency),
+])
 
 PUBLISH_INTERVAL_SEC = 3
 QOS = 0
-RETAIN = False  # cambia a True si quieres retener el último valor
+RETAIN = False
 
-# ----- Callbacks -----
+# ========================
+# Util
+# ========================
+def ts():
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+# ========================
+# Callbacks
+# ========================
 def on_connect(client, userdata, flags, reason_code, properties=None):
     ok = reason_code == 0
     print(f"[{ts()}] Conectado: {ok}. reason_code={reason_code}")
-    # Suscribirse a los tres topics
-    client.subscribe([(TOPIC_FLOW, QOS), (TOPIC_PCASING, QOS), (TOPIC_PTUBING, QOS), (TOPIC_FRECUENCY, QOS), (TOPIC_PRESSUREINTAKE, QOS)])
-
+    # Suscripción única por estación para ver en consola todo lo que caiga:
+    wildcard = make_topic(STATION, "+")  # "/Sacha53/+/"
+    client.subscribe(wildcard, qos=QOS)
+    print(f"[{ts()}] Subscrito a {wildcard}")
 
 def on_message(client, userdata, msg):
-    print(f"[{ts()}] RX  {msg.topic} -> {msg.payload.decode(errors='ignore')}")
+    try:
+        payload = msg.payload.decode(errors="ignore")
+    except Exception:
+        payload = str(msg.payload)
+    print(f"[{ts()}] RX  {msg.topic} -> {payload}")
 
 def on_disconnect(client, userdata, reason_code, properties=None):
     print(f"[{ts()}] Desconectado. reason_code={reason_code}")
 
-def ts():
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-# ----- Generadores de valores -----
-def gen_flow():
-    # 100 .. 1,000,000 (entero)
-    return str(random.randint(100, 1_000_000))
-
-def gen_pressure():
-    # 0 .. 300 (con dos decimales)
-    return f"{random.uniform(0, 300):.2f}"
-
-def gen_pressure2():
-    # 0 .. 300 (con dos decimales)
-    return f"{random.uniform(0, 1000):.2f}"
-
-def gen_frecuency():
-    # 0 .. 300 (con dos decimales)
-    return f"{random.uniform(0, 100):.2f}"
-
-def gen_temp():
-    # 0 .. 300 (con dos decimales)
-    return f"{random.uniform(0, 100):.2f}"
-def gen_amper():
-    # 0 .. 300 (con dos decimales)
-    return f"{random.uniform(0, 60):.2f}"
-
+# ========================
+# Main
+# ========================
 def main():
     # Cliente MQTT
     client = mqtt.Client(transport="websockets" if USE_WEBSOCKET else "tcp")
-    # Si tu broker requiere un path WS (por ejemplo "/mqtt"), descomenta:
-    # client.ws_set_options(path="/mqtt")
+    if USE_WEBSOCKET and WS_PATH:
+        client.ws_set_options(path=WS_PATH)
 
     # Si tu broker requiere usuario/clave:
     # client.username_pw_set("usuario", "clave")
@@ -82,48 +97,19 @@ def main():
     client.loop_start()
 
     try:
-        print(f"[{ts()}] Publicando cada {PUBLISH_INTERVAL_SEC}s en:")
-        print(f"  - {TOPIC_FLOW}     (100..1,000,000)")
-        print(f"  - {TOPIC_PCASING}  (0..300)")
-        print(f"  - {TOPIC_PTUBING}  (0..300)")
-        print(f"  - {TOPIC_FRECUENCY}  (0..300)")
-        print(f"  - {TOPIC_PRESSUREINTAKE}  (0..300)")
-        print(f"  - {TOPIC_TEMP_MOT}  (0..100)")
-        print(f"  - {TOPIC_AMPER}  (0..60)")
-
+        print(f"[{ts()}] Publicando cada {PUBLISH_INTERVAL_SEC}s:")
+        for name in SENSORS:
+            print(f"  - {make_topic(STATION, name)}")
 
         while True:
-            flow_val    = gen_flow()
-            casing_val  = gen_pressure()
-            tubing_val  = gen_pressure()
-            frecuency_val = gen_frecuency()
-            pressureintake_val = gen_pressure2()
-            temp_mot_val = gen_temp()
-            amper_val = gen_amper()
-
-
-            # Publicar como payloads simples (números en texto)
-            client.publish(TOPIC_FLOW,    flow_val,   qos=QOS, retain=RETAIN)
-            client.publish(TOPIC_PCASING, casing_val, qos=QOS, retain=RETAIN)
-            client.publish(TOPIC_PTUBING, tubing_val, qos=QOS, retain=RETAIN)
-            client.publish(TOPIC_FRECUENCY, frecuency_val, qos=QOS, retain=RETAIN)
-            client.publish(TOPIC_PRESSUREINTAKE, pressureintake_val, qos=QOS, retain=RETAIN)
-            client.publish(TOPIC_TEMP_MOT, temp_mot_val, qos=QOS, retain=RETAIN)
-            client.publish(TOPIC_AMPER, amper_val, qos=QOS, retain=RETAIN)
-
-
-
-            print(f"[{ts()}] TX  {TOPIC_FLOW}    -> {flow_val}")
-            print(f"[{ts()}] TX  {TOPIC_PCASING} -> {casing_val}")
-            print(f"[{ts()}] TX  {TOPIC_PTUBING} -> {tubing_val}")
-            print(f"[{ts()}] TX  {TOPIC_FRECUENCY} -> {gen_pressure()}")
-            print(f"[{ts()}] TX  {TOPIC_PRESSUREINTAKE} -> {gen_pressure()}")
-            print(f"[{ts()}] TX  {TOPIC_TEMP_MOT} -> {gen_temp()}")
-            print(f"[{ts()}] TX  {TOPIC_AMPER} -> {gen_amper()}")
-
-
-
+            for sensor_name, gen_func in SENSORS.items():
+                value = gen_func()
+                topic = make_topic(STATION, sensor_name)
+                # Publica
+                client.publish(topic, value, qos=QOS, retain=RETAIN)
+                print(f"[{ts()}] TX  {topic} -> {value}")
             time.sleep(PUBLISH_INTERVAL_SEC)
+
     except KeyboardInterrupt:
         print(f"\n[{ts()}] Saliendo...")
     finally:

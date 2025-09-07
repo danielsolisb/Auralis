@@ -161,7 +161,10 @@ STATIC_URL = '/static/'  # Asegúrate que tenga el slash inicial
 STATICFILES_DIRS = [
     BASE_DIR / 'static'
 ]
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
+# Si no lo tienes, define también la URL de acceso
+STATIC_URL = '/static/'
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 

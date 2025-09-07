@@ -5,6 +5,7 @@ import time
 import random
 from collections import OrderedDict
 from datetime import datetime
+from typing import Optional, Callable
 import paho.mqtt.client as mqtt
 
 # ========================
@@ -16,7 +17,7 @@ USE_WEBSOCKET = True               # usar WS
 KEEPALIVE = 60
 
 # Si tu broker WS requiere un path (p.ej. "/mqtt"), descomenta:
-WS_PATH = None
+WS_PATH: Optional[str] = None
 # WS_PATH = "/mqtt"
 
 # ========================
@@ -28,25 +29,63 @@ def make_topic(station: str, sensor: str) -> str:
     """Devuelve /<station>/<sensor>/ con slash inicial y final."""
     return f"/{station}/{sensor}/"
 
+# ========================
+# Generadores de valores
+# ========================
+
+def gen_current() -> str:          # A
+    return f"{random.uniform(10, 11):.2f}"
+
+def gen_pressure_1k() -> str:      # PSI ~ 0..1000
+    return f"{random.uniform(650, 654):.2f}"
+
+def gen_pressure_2k() -> str:      # PSI ~ 0..1000
+    return f"{random.uniform(628, 640):.2f}"
+
+def gen_frequency() -> str:        # Hz
+    return f"{random.uniform(20, 24):.2f}"
+
+# --- Helper para variaciones suaves (random walk acotado) ---
+def make_smooth_gen(
+    lo: float,
+    hi: float,
+    step: float = 0.25,
+    start: Optional[float] = None,
+    ndigits: int = 2
+) -> Callable[[], str]:
+    """
+    Crea un generador 'suave' entre [lo, hi].
+    step: tamaño máximo del paso por muestra (cuanto menor, más suave).
+    """
+    cur = start if start is not None else (lo + hi) / 2.0
+
+    def _gen() -> str:
+        nonlocal cur
+        cur += random.uniform(-step, step)
+        # rebotes suaves en los bordes
+        if cur < lo:
+            cur = lo + (lo - cur) * 0.2
+        elif cur > hi:
+            cur = hi - (cur - hi) * 0.2
+        return f"{round(cur, ndigits):.{ndigits}f}"
+
+    return _gen
+
 # Sensores a publicar (nombre_de_sensor -> función generadora)
-# Ajusta los rangos a tu gusto.
-def gen_current():          # A
-    return f"{random.uniform(20, 25):.2f}"
-
-def gen_pressure_1k():      # PSI ~ 0..1000
-    return f"{random.uniform(400, 410):.2f}"
-
-def gen_pressure_2k():      # PSI ~ 0..1000
-    return f"{random.uniform(700, 710):.2f}"
-
-def gen_frequency():        # Hz
-    return f"{random.uniform(40, 46):.2f}"
+# Los 3 nuevos usan el generador suave para mantener variación baja.
+gen_anular     = make_smooth_gen(120.0, 125.0, step=0.20, start=122.5, ndigits=2)
+gen_casing     = make_smooth_gen(80.0, 88.0, step=0.35, start=179.0, ndigits=2)
+gen_motor_temp = make_smooth_gen(40.0,  45.0,  step=0.15, start=42.5,  ndigits=2)
 
 SENSORS = OrderedDict([
     ("Motor_Current",            gen_current),
     ("Pump_Discharge_Pressure",  gen_pressure_1k),
     ("Pump_Intake_Pressure",     gen_pressure_2k),
     ("VFD_Output_Frecuency",     gen_frequency),
+    # --- nuevos ---
+    ("Anular",                   gen_anular),
+    ("Casing",                   gen_casing),
+    ("Motor_temp",               gen_motor_temp),
 ])
 
 PUBLISH_INTERVAL_SEC = 3
@@ -56,7 +95,7 @@ RETAIN = False
 # ========================
 # Util
 # ========================
-def ts():
+def ts() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 # ========================

@@ -4,17 +4,72 @@
 
 
 {% block content %}
-<!--Page content-->
-<!--===================================================-->
-<div id="page-content">
-  <!--Activated Users Chart-->
-  <!--===================================================-->
-  <div class="panel">
-    <div class="panel-body"></div>
+<div class="panel panel-default">
+  <div class="panel-heading compact">
+    <h3 class="panel-title">{{ title }}</h3>
   </div>
-  <!--===================================================-->
-  <!--End Activated Users chart-->
+
+  <div class="panel-body">
+    <div style="display:flex;gap:16px;">
+      <!-- Tabs -->
+      <div style="width:220px;">
+        <ul id="settings-tabs" class="nav nav-pills nav-stacked">
+          <li class="active"><a href="#" data-tab="stations">Estaciones</a></li>
+          <li><a href="#" data-tab="sensors">Sensores</a></li>
+          <li><a href="#" data-tab="policies">Políticas</a></li>
+        </ul>
+      </div>
+
+      <!-- Contenido -->
+      <div style="flex:1 1 auto;">
+        <!-- Estaciones -->
+        <div id="tab-stations" class="tab-pane active">
+          <div style="display:flex;justify-content:space-between;margin-bottom:10px;">
+            <strong>Estaciones</strong>
+            {% if is_admin %}
+            <button id="btn-new-station" class="btn btn-primary btn-xs">Nueva estación</button>
+            {% endif %}
+          </div>
+          <div id="stations-table"></div>
+        </div>
+
+        <!-- Sensores -->
+        <div id="tab-sensors" class="tab-pane" style="display:none;">
+          <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;">
+            <label>Estación:</label>
+            <select id="sel-station-sensors" class="form-control input-sm" style="min-width:260px;"></select>
+            {% if is_admin %}
+            <button id="btn-new-sensor" class="btn btn-primary btn-xs">Nuevo sensor</button>
+            {% endif %}
+          </div>
+          <div id="sensors-table"></div>
+        </div>
+
+        <!-- Políticas -->
+        <div id="tab-policies" class="tab-pane" style="display:none;">
+          <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;">
+            <label>Estación:</label>
+            <select id="sel-station-policies" class="form-control input-sm" style="min-width:260px;"></select>
+            <label>Sensores:</label>
+            <select id="sel-sensor-policy" class="form-control input-sm" style="min-width:260px;"></select>
+          </div>
+
+          <div id="policy-form-wrap" style="display:none;">
+            <div id="policy-form"></div>
+            <div style="margin-top:12px;">
+              <div id="policy-gauge" style="width:480px;height:300px;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
-<!--===================================================-->
-<!--End page content-->
+
+
+
+<script>window.SETTINGS_CTX = { isAdmin: {{ is_admin|yesno:"true,false" }} };</script>
+<!-- Asegúrate de tener echarts; si ya está en base.html, omite esta línea -->
+<script src="{% static 'js/echarts.min.js' %}"></script>
+<script src="{% static 'js/settings.js' %}?v=1"></script>
 {% endblock %}

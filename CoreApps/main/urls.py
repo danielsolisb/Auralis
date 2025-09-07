@@ -9,7 +9,15 @@ from .views import (
     DashboardMapView, DashboardMonitorView, 
     DashboardSettingsView, DashboardSupportView,
     StationDataView, DataHistoryView, DataReportView,
-    get_station_sensors, get_station_data, get_station_history, StationLocationsView, DashboardOperatorMonitorView  # Asegúrate de importar esta función también
+    get_station_sensors, get_station_data, get_station_history, 
+    StationLocationsView, 
+    DashboardOperatorMonitorView,  # Asegúrate de importar esta función también
+    api_settings_companies,
+    api_settings_stations,
+    api_settings_station_detail,
+    api_settings_sensors_by_station,
+    api_settings_sensor_detail,
+    api_settings_policy_by_sensor,
 )
 
 # Elimina esta línea redundante
@@ -38,6 +46,12 @@ urlpatterns = [
     path('api/stations/<int:station_id>/history/', get_station_history, name='get_station_history'),
 
     path('dashboard/settings/', DashboardSettingsView.as_view(), name='dashboard-settings'),
+    path('api/settings/companies/', api_settings_companies, name='api_settings_companies'),
+    path('api/settings/stations/', api_settings_stations, name='api_settings_stations'),
+    path('api/settings/stations/<int:pk>/', api_settings_station_detail, name='api_settings_station_detail'),
+    path('api/settings/sensors/', api_settings_sensors_by_station, name='api_settings_sensors_by_station'),   # ?station_id=#
+    path('api/settings/sensors/<int:pk>/', api_settings_sensor_detail, name='api_settings_sensor_detail'),
+    path('api/settings/policy/<int:sensor_id>/', api_settings_policy_by_sensor, name='api_settings_policy_by_sensor'),
     path('dashboard/support/', DashboardSupportView.as_view(), name='dashboard-support'),
     
 ]

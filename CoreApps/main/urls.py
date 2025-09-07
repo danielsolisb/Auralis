@@ -18,6 +18,7 @@ from .views import (
     api_settings_sensors_by_station,
     api_settings_sensor_detail,
     api_settings_policy_by_sensor,
+    api_settings_sensor_types,
 )
 
 # Elimina esta línea redundante
@@ -52,6 +53,7 @@ urlpatterns = [
     path('api/settings/sensors/', api_settings_sensors_by_station, name='api_settings_sensors_by_station'),   # ?station_id=#
     path('api/settings/sensors/<int:pk>/', api_settings_sensor_detail, name='api_settings_sensor_detail'),
     path('api/settings/policy/<int:sensor_id>/', api_settings_policy_by_sensor, name='api_settings_policy_by_sensor'),
+    path('api/settings/sensor-types/', api_settings_sensor_types, name='api_settings_sensor_types'),
     path('dashboard/support/', DashboardSupportView.as_view(), name='dashboard-support'),
     
 ]

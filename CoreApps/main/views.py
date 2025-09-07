@@ -9,7 +9,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.views.generic import TemplateView
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from CoreApps.sensorhub.models import Sensor, Station, AlertPolicy
+from CoreApps.sensorhub.models import Sensor, Station, AlertPolicy, SensorType
 from CoreApps.users.models import User
 from CoreApps.measurements.models import Measurement
 from CoreApps.events.models import Alarm, Warning
@@ -772,3 +772,12 @@ def api_settings_policy_by_sensor(request, sensor_id):
             log_audit(user, 'update', 'AlertPolicy', policy.id, station=sensor.station, sensor=sensor, changes=changes)
 
     return JsonResponse({'ok': True})
+
+
+@login_required
+def api_settings_sensor_types(request):
+    if request.method != 'GET':
+        return HttpResponseNotAllowed(['GET'])
+    qs = SensorType.objects.all().order_by('name')
+    data = [{'id': st.id, 'name': st.name, 'unit': st.unit} for st in qs]
+    return JsonResponse({'results': data})

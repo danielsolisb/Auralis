@@ -2,7 +2,8 @@ from django.db import models
 from django.conf import settings
 from django.utils.translation import gettext_lazy as _
 from CoreApps.users.models import Company
-from django.core.validators import RegexValidator
+from django.core.validators import RegexValidator, MinValueValidator, MaxValueValidator
+from django.core.exceptions import ValidationError 
 
 
 class Station(models.Model):
@@ -31,6 +32,27 @@ class Station(models.Model):
         decimal_places=6,
         null=True,
         blank=True
+    )
+    ip_address = models.GenericIPAddressField(
+        _('dirección IP'),
+        protocol='both',
+        blank=True,
+        null=True,
+        help_text=_('Dirección IP del servidor donde recibe los datos.')
+    )
+    port = models.PositiveIntegerField(
+        _('puerto'),
+        blank=True,
+        null=True,
+        validators=[MinValueValidator(1), MaxValueValidator(65535)],
+        help_text=_('Puerto de comunicación (ej. 1883 para MQTT).')
+    )
+    mqtt_topic = models.CharField(
+        _('topic MQTT de estado'),
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text=_('Topic para reportar el estado de la estación (ej. "station/123/status").')
     )
     # Asociación a la empresa, que nos permitirá filtrar los usuarios
     company = models.ForeignKey(
@@ -202,6 +224,27 @@ class Sensor(models.Model):
         related_name='sensors',
         null=True, blank=True,
         verbose_name=_('fuente de datos')
+    )
+    ip_address = models.GenericIPAddressField(
+        _('dirección IP'),
+        protocol='both',
+        blank=True,
+        null=True,
+        help_text=_('IP del dispositivo, si es diferente a la de la estación.')
+    )
+    port = models.PositiveIntegerField(
+        _('puerto'),
+        blank=True,
+        null=True,
+        validators=[MinValueValidator(1), MaxValueValidator(65535)],
+        help_text=_('Puerto de comunicación, si es diferente al de la estación.')
+    )
+    mqtt_topic = models.CharField(
+        _('topic MQTT de datos'),
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text=_('Topic único donde el sensor publica sus mediciones.')
     )
     configuration = models.JSONField(
         _('configuración'),

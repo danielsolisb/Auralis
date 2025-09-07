@@ -10,11 +10,10 @@ class SensorInline(admin.TabularInline):
 
 @admin.register(Station)
 class StationAdmin(admin.ModelAdmin):
-    list_display = ('name', 'company', 'location', 'is_active', 'get_related_users')
+    list_display = ('name', 'company', 'location', 'is_active', 'ip_address', 'mqtt_topic', 'get_related_users')
     list_filter = ('company', 'is_active')
-    search_fields = ('name', 'description', 'location', 'company__name')
-    # Ahora solo se muestra el campo relacionado que existe
-    filter_horizontal = ('related_users',)  
+    search_fields = ('name', 'description', 'location', 'company__name', 'ip_address', 'mqtt_topic')
+    filter_horizontal = ('related_users',) 
     
     def get_related_users(self, obj):
         return ", ".join([str(user) for user in obj.related_users.all()])
@@ -55,20 +54,24 @@ class DataSourceAdmin(admin.ModelAdmin):
 
 @admin.register(Sensor)
 class SensorAdmin(admin.ModelAdmin):
-    list_display = ('name', 'station', 'sensor_type', 'system', 'source', 'is_active', 'min_value', 'max_value', 'color', 'site')
+    list_display = ('name', 'station', 'sensor_type', 'system', 'source', 'ip_address', 'port', 'mqtt_topic', 'is_active', 'min_value', 'max_value', 'color', 'site')
     list_filter  = ('station', 'sensor_type', 'system', 'source', 'is_active')
-    search_fields = ('name', 'station__name', 'sensor_type__name', 'system__name', 'source__name', 'site')
+    search_fields = ('name', 'station__name', 'ip_address', 'mqtt_topic','sensor_type__name', 'system__name', 'source__name', 'site')
     list_select_related = ('station', 'sensor_type', 'system', 'source')
 
     fieldsets = (
         (None, {
             'fields': ('name', 'station', 'sensor_type', 'system', 'source', 'is_active', 'color', 'site')
         }),
+        (_('Conectividad'), {
+            'fields': ('ip_address', 'port', 'mqtt_topic'),
+        }),
         (_('Rangos'), {
             'fields': ('min_value', 'max_value'),
         }),
         (_('Técnico'), {
             'fields': ('configuration', 'firmware_version', 'installation_date', 'last_maintenance'),
+            'classes': ('collapse',), # Opcional: hace que esta sección aparezca colapsada
         }),
     )
 

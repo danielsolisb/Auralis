@@ -203,6 +203,8 @@ $(function () {
 
    // La conexión ahora se inicia con los datos de la estación
    // REEMPLAZA initMQTTClient CON ESTA FUNCIÓN
+
+
 function connectAndSubscribe(brokerIp, brokerPort, topics) {
   // Desconecta si hay cliente previo
   if (mqttClient) {
@@ -215,23 +217,33 @@ function connectAndSubscribe(brokerIp, brokerPort, topics) {
   const USE_SSL = (location.protocol === 'https:');
   const clientId = "auralis_dashboard_" + Math.random().toString(16).slice(2, 10);
 
+  // *** DEBUG: pon en false cuando termines de probar ***
+  const DEBUG_ALL = true;
+
   // Backoff para reintentos
-  let retryMs = 1000;     // 1s inicial
-  const retryMax = 15000; // 15s máx
+  let retryMs = 1000;
+  const retryMax = 15000;
 
   mqttClient = new Paho.MQTT.Client(HOST, Number(PORT), WS_PATH, clientId);
 
   mqttClient.onConnectionLost = function (resp) {
-    console.warn("MQTT conexión perdida:", resp?.errorMessage || resp);
+    console.warn("MQTT conexión perdida:", (resp && resp.errorMessage) || resp);
+    if (DEBUG_ALL) console.log("DEBUG onConnectionLost:", resp);
     setTimeout(() => {
       console.log("Reintentando conexión MQTT...");
       mqttClient.connect(connectOpts);
-      // incrementa backoff
       retryMs = Math.min(retryMs * 2, retryMax);
     }, retryMs);
   };
 
-  mqttClient.onMessageArrived = onMessageArrived;
+  // *** DEBUG: loguea TODOS los mensajes crudos que lleguen ***
+  mqttClient.onMessageArrived = function (m) {
+    try {
+      console.log("DEBUG msg:", m.destinationName, m.payloadString);
+    } catch (_) {}
+    // Llama a tu handler normal para que alimente el gráfico
+    try { onMessageArrived(m); } catch (e) { console.error("onMessageArrived error:", e); }
+  };
 
   const connectOpts = {
     useSSL: USE_SSL,
@@ -240,10 +252,22 @@ function connectAndSubscribe(brokerIp, brokerPort, topics) {
     cleanSession: true,
     onSuccess: () => {
       console.log(`MQTT conectado a wss://${HOST}:${PORT}${WS_PATH}`);
-      // reset backoff
       retryMs = 1000;
-      // Suscribe a todos los tópicos
-      unsubscribeFromAllTopics?.();
+
+      // Limpia suscripciones anteriores
+      if (typeof unsubscribeFromAllTopics === "function") unsubscribeFromAllTopics();
+
+      // *** DEBUG: suscribirse a TODO para ver qué llega (temporal) ***
+      if (DEBUG_ALL) {
+        try {
+          mqttClient.subscribe('#', { qos: 0 });
+          console.log("DEBUG: suscrito a # (todas las rutas)");
+        } catch (e) {
+          console.error("DEBUG: fallo suscribiendo a #", e);
+        }
+      }
+
+      // Tus suscripciones reales
       topics.forEach(t => {
         try {
           mqttClient.subscribe(t, { qos: 0 });
@@ -254,7 +278,7 @@ function connectAndSubscribe(brokerIp, brokerPort, topics) {
       });
     },
     onFailure: (e) => {
-      console.error("MQTT connect failed:", e?.errorMessage || e);
+      console.error("MQTT connect failed:", (e && e.errorMessage) || e);
       setTimeout(() => {
         console.log("Reintentando conexión MQTT...");
         mqttClient.connect(connectOpts);
@@ -267,47 +291,6 @@ function connectAndSubscribe(brokerIp, brokerPort, topics) {
   mqttClient.connect(connectOpts);
 }
 
-//function connectAndSubscribe(brokerIp, brokerPort, topics) {
-//    // Si ya estamos conectados al mismo broker, solo ajustamos suscripciones
-//    if (mqttClient && mqttClient.isConnected() && mqttClient.host === brokerIp && mqttClient.port === Number(brokerPort)) {
-//        unsubscribeFromAllTopics();
-//        topics.forEach(topic => subscribeToTopic(topic));
-//        return;
-//    }
-//
-//    // Si hay un cliente, lo desconectamos para cambiar de broker
-//    if (mqttClient) {
-//        try { mqttClient.disconnect(); } catch(e) {}
-//    }
-//    
-//    const clientId = "auralis_dashboard_" + Math.random().toString(16).substr(2, 8);
-//    try {
-//        //mqttClient = new Paho.MQTT.Client(brokerIp, Number(brokerPort), "/", clientId);
-//        //mqttClient.onConnectionLost = onConnectionLost;
-//        //mqttClient.onMessageArrived = onMessageArrived;
-//        //mqttClient.connect({
-//        //    onSuccess: () => {
-//        //        console.log(`MQTT Conectado a ${brokerIp}:${brokerPort}`);
-//        //        topics.forEach(topic => subscribeToTopic(topic));
-//        //    },
-//        //    onFailure: (e) => console.error("Conexión MQTT fallida:", e.errorMessage),
-//        //    useSSL: false,
-//        //    keepAliveInterval: 60
-//        //});
-//        const WS_PATH = "/mqtt";
-//        const HOST = window.location.hostname;  // gasmart.ecuapulselab.com
-//        const PORT = 443;
-//        const USE_SSL = (location.protocol === 'https:');
-//
-//        mqttClient = new Paho.MQTT.Client(HOST, Number(PORT), WS_PATH, clientId);
-//        mqttClient.connect({
-//          useSSL: USE_SSL,
-//          keepAliveInterval: 60,
-//          onSuccess: () => { /* suscripciones */ },
-//          onFailure: (e) => console.error("MQTT connect failed:", e)
-//        });
-//    } catch (e) { console.error("Error creando cliente MQTT:", e); }
-//}
 
 
     function onConnectionLost(resp) {

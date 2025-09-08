@@ -197,11 +197,10 @@
   if(!res.ok) throw new Error("fetchSensors failed");
   const json = await res.json();
 
-  // Ajusta los nombres si tu API usa 'ip'/'port' u otros
   const stationConn = {
     host:  json?.station?.mqtt_host ?? json?.station?.ip ?? null,
     port:  Number(json?.station?.mqtt_port ?? json?.station?.port ?? 8081),
-    useSSL: false // FORZADO: no usar SSL por ahora
+    useSSL: true  // ← opcional; ya no se usa, pero mejor dejarlo coherente
   };
 
   const list = Array.isArray(json?.sensors) ? json.sensors : [];
@@ -218,6 +217,7 @@
 
   return { stationConn, list: normalized };
 }
+
 
   async function fetchHistory(stationId, range){
     const url = API_HISTORY.replace("{station_id}", String(stationId)) + `?timescale=${encodeURIComponent(range)}`;
@@ -459,75 +459,98 @@ function applyHistory(historyData){
   // ============================
   // MQTT
   // ============================
+  
   function subscribeStation(stationConn){
-  // cerrar suscripción anterior si existiera
-  try { mqttClient?.disconnect(); } catch(_){}
+  // Cierra cliente previo (si lo hay)
+  try { mqttClient?.disconnect(); } catch(_) {}
   mqttClient = null;
 
-  // Mapa topic -> sensorId (SIN normalización; tal cual en BD)
+  // Mapa topic -> sensorId exactamente como viene de la BD
   const topicMap = new Map();
   sensors.forEach(s => {
     if (s.mqtt_topic && typeof s.mqtt_topic === 'string') {
       topicMap.set(s.mqtt_topic, s.id);
     }
   });
-  const useTopics = topicMap.size > 0;
+  const hasTopics = topicMap.size > 0;
 
-  // Host/puerto (fallback a CFG si faltan)
-  const host = stationConn?.host ?? (CFG?.mqtt?.host || "localhost");
-  const port = Number(stationConn?.port ?? (CFG?.mqtt?.port || 8081));
-  const useSSL = false; // FORZADO: no SSL
+  // Nos vamos SIEMPRE por el proxy HTTPS del sitio (WSS)
+  const HOST    = window.location.hostname;   // p.ej. gasmart.ecuapulselab.com
+  const PORT    = 443;
+  const WS_PATH = "/mqtt";
+  const USE_SSL = (location.protocol === "https:");
 
-  const clientId = "montec_" + Math.random().toString(16).slice(2);
-  mqttClient = new Paho.MQTT.Client(host, port, clientId);
-
-  mqttClient._conn = { host, port, useSSL };
+  const clientId = "montec_" + Math.random().toString(16).slice(2, 10);
+  mqttClient = new Paho.MQTT.Client(HOST, Number(PORT), WS_PATH, clientId);
   mqttClient._topicMap = topicMap;
 
   mqttClient.onMessageArrived = onMessageArrived;
-  mqttClient.onConnectionLost = function(){
-    console.warn("MQTT desconectado; reintentando en 3s…");
-    const last = mqttClient?._conn || stationConn || null;
-    setTimeout(()=>subscribeStation(last), 3000);
+
+  // reintento con backoff suave
+  let retryMs = 1000, retryMax = 15000;
+  const reconnect = () => {
+    setTimeout(() => {
+      retryMs = Math.min(retryMs * 2, retryMax);
+      try { subscribeStation(stationConn); } catch(e) { console.error(e); }
+    }, retryMs);
   };
 
-  mqttClient.connect({
-    useSSL,
-    timeout: 5,
-    onSuccess: function(){
-      if (useTopics) {
-        // Suscribir exactamente a cada topic de BD, sin modificarlo
-        topicMap.forEach((_, t) => mqttClient.subscribe(t));
+  mqttClient.onConnectionLost = (resp) => {
+    console.warn("MQTT desconectado:", resp?.errorMessage || resp);
+    reconnect();
+  };
+
+  const connectOpts = {
+    useSSL: USE_SSL,
+    keepAliveInterval: 60,
+    timeout: 8,
+    cleanSession: true,
+    onSuccess: () => {
+      console.log(`MQTT conectado a wss://${HOST}:${PORT}${WS_PATH}`);
+      retryMs = 1000; // reset backoff
+
+      if (hasTopics) {
+        topicMap.forEach((_, t) => {
+          try { mqttClient.subscribe(t, { qos: 0 }); console.log("Suscrito:", t); }
+          catch(e){ console.error("Error suscribiendo", t, e); }
+        });
       } else {
-        // Fallback legado: patrón por nombre (si algún sensor no tiene topic en BD)
+        // Patrón legado si algún sensor no tiene topic en BD
         const legacy = `/${currentStationName}/+/`;
-        mqttClient.subscribe(legacy);
+        try { mqttClient.subscribe(legacy, { qos: 0 }); console.log("Suscrito (legado):", legacy); }
+        catch(e){ console.error("Error suscribiendo legado", legacy, e); }
       }
     },
-    onFailure: function(err){
-      console.error("MQTT conexión fallida", err);
+    onFailure: (e) => {
+      console.error("MQTT connect failed:", e?.errorMessage || e);
+      reconnect();
     }
-  });
+  };
+
+  console.log("Conectando MQTT por WSS vía /mqtt …");
+  mqttClient.connect(connectOpts);
 }
 
 
+
  function onMessageArrived(message){
+  const topic   = message?.destinationName || "";
   const payload = message?.payloadString;
   if (payload == null) return;
 
-  // 1) Intento directo por topic EXACTO (tal cual llegó del broker)
-  const rawTopic = (message.destinationName || "");
-  const byTopicId = mqttClient?._topicMap?.get(rawTopic);
+  // DEBUG (si quieres, luego lo quitas)
+  console.log("MQTT ▶", topic, payload);
+
+  // 1) Match directo por topic exacto
+  const byTopicId = mqttClient?._topicMap?.get(topic);
   if (byTopicId) {
     const val = Number(payload);
-    if (!Number.isNaN(val)) {
-      pushPoint(byTopicId, new Date(), val);
-    }
+    if (!Number.isNaN(val)) pushPoint(byTopicId, new Date(), val);
     return;
   }
 
-  // 2) Fallback legado "/Estacion/Sensor/...": solo si no hay topic en BD
-  const parts = rawTopic.split("/").filter(Boolean);
+  // 2) Fallback legado /Estacion/Sensor/...
+  const parts = topic.split("/").filter(Boolean);
   if(parts.length >= 2){
     const station = parts[0];
     const sensorName = parts[1];
@@ -540,6 +563,7 @@ function applyHistory(historyData){
     }
   }
 }
+
 
   // ============================
   // DATA PUSH & RANGE

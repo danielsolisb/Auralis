@@ -204,52 +204,67 @@ $(function () {
    // La conexión ahora se inicia con los datos de la estación
    // REEMPLAZA initMQTTClient CON ESTA FUNCIÓN
 function connectAndSubscribe(brokerIp, brokerPort, topics) {
-  // Si ya estamos conectados al mismo "broker" lógico (host/puerto), solo re-suscribe
-  if (mqttClient && mqttClient.isConnected() &&
-      mqttClient.host === window.location.hostname && mqttClient.port === 443) {
-    unsubscribeFromAllTopics();
-    topics.forEach(t => subscribeToTopic(t));
-    return;
-  }
-
-  // Si hay un cliente previo, desconectarlo
+  // Desconecta si hay cliente previo
   if (mqttClient) {
     try { mqttClient.disconnect(); } catch (e) {}
   }
 
-  // Siempre usamos el dominio + /mqtt + WSS cuando la página es HTTPS
   const HOST    = window.location.hostname; // gasmart.ecuapulselab.com
   const PORT    = 443;
   const WS_PATH = "/mqtt";
   const USE_SSL = (location.protocol === 'https:');
   const clientId = "auralis_dashboard_" + Math.random().toString(16).slice(2, 10);
 
-  try {
-    mqttClient = new Paho.MQTT.Client(HOST, Number(PORT), WS_PATH, clientId);
+  // Backoff para reintentos
+  let retryMs = 1000;     // 1s inicial
+  const retryMax = 15000; // 15s máx
 
-    // Handlers
-    mqttClient.onConnectionLost = onConnectionLost;
-    mqttClient.onMessageArrived = onMessageArrived;
+  mqttClient = new Paho.MQTT.Client(HOST, Number(PORT), WS_PATH, clientId);
 
-    mqttClient.connect({
-      useSSL: USE_SSL,
-      keepAliveInterval: 60,
-      timeout: 8,
-      reconnect: true,              // auto-reconnect
-      cleanSession: true,
-      onSuccess: () => {
-        console.log(`MQTT conectado (WSS) a ${HOST}:${PORT}${WS_PATH}`);
-        // Suscribir a TODOS los tópicos solicitados
-        unsubscribeFromAllTopics();
-        topics.forEach(t => subscribeToTopic(t));
-      },
-      onFailure: (e) => {
-        console.error("MQTT connect failed:", e?.errorMessage || e);
-      }
-    });
-  } catch (e) {
-    console.error("Error creando cliente MQTT:", e);
-  }
+  mqttClient.onConnectionLost = function (resp) {
+    console.warn("MQTT conexión perdida:", resp?.errorMessage || resp);
+    setTimeout(() => {
+      console.log("Reintentando conexión MQTT...");
+      mqttClient.connect(connectOpts);
+      // incrementa backoff
+      retryMs = Math.min(retryMs * 2, retryMax);
+    }, retryMs);
+  };
+
+  mqttClient.onMessageArrived = onMessageArrived;
+
+  const connectOpts = {
+    useSSL: USE_SSL,
+    keepAliveInterval: 60,
+    timeout: 8,
+    cleanSession: true,
+    onSuccess: () => {
+      console.log(`MQTT conectado a wss://${HOST}:${PORT}${WS_PATH}`);
+      // reset backoff
+      retryMs = 1000;
+      // Suscribe a todos los tópicos
+      unsubscribeFromAllTopics?.();
+      topics.forEach(t => {
+        try {
+          mqttClient.subscribe(t, { qos: 0 });
+          console.log("Suscrito:", t);
+        } catch (e) {
+          console.error("Error al suscribir", t, e);
+        }
+      });
+    },
+    onFailure: (e) => {
+      console.error("MQTT connect failed:", e?.errorMessage || e);
+      setTimeout(() => {
+        console.log("Reintentando conexión MQTT...");
+        mqttClient.connect(connectOpts);
+        retryMs = Math.min(retryMs * 2, retryMax);
+      }, retryMs);
+    }
+  };
+
+  console.log("Conectando MQTT por WSS vía /mqtt ...");
+  mqttClient.connect(connectOpts);
 }
 
 //function connectAndSubscribe(brokerIp, brokerPort, topics) {

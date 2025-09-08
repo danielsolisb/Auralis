@@ -245,40 +245,48 @@ def get_sensors_for_station(request, station_id):
 @login_required
 def get_station_sensors(request, station_id):
     """
-    API para obtener los sensores asociados a una estación específica.
-    Solo devuelve sensores de estaciones que pertenecen al usuario actual.
+    API para obtener los sensores asociados a una estación específica,
+    incluyendo la información de conectividad.
     """
     try:
-        # Verificar que la estación pertenece al usuario actual
-        #station = Station.objects.get(id=station_id, owner=request.user)
-        station = Station.objects.get(id=station_id, related_users=request.user)       
-        # Obtener los sensores de la estación
-        sensors = Sensor.objects.filter(station=station)
+        # Usamos select_related para optimizar la consulta a la base de datos
+        station = Station.objects.select_related('company').get(id=station_id, related_users=request.user)
+        sensors = Sensor.objects.filter(station=station, is_active=True).select_related('sensor_type')
         
-        # Preparar la respuesta
         sensors_data = []
         for sensor in sensors:
             sensors_data.append({
                 'id': sensor.id,
                 'name': sensor.name,
-                'unit': sensor.sensor_type.unit,  # Corregido: usar sensor_type.unit
-                'type': sensor.sensor_type.name,   # Corregido: usar sensor_type.name
+                'unit': sensor.sensor_type.unit,
+                'type': sensor.sensor_type.name,
                 'min_value': sensor.min_value,
                 'max_value': sensor.max_value,
                 'site': getattr(sensor, 'site', None),
                 'color': getattr(sensor, 'color', None),
-                'topic': sensor.name, 
+                
+                # --- CAMBIOS CLAVE ---
+                # Usamos el topic de la base de datos. Si no tiene, no lo incluimos.
+                'topic': sensor.mqtt_topic, 
+                
+                # Agregamos IP y puerto por si un sensor tuviera datos diferentes a la estación
+                'ip_address': sensor.ip_address,
+                'port': sensor.port
             })
-        
+            
         return JsonResponse({
             'station_name': station.name,
+            # Agregamos los datos de conexión de la estación a la respuesta principal
+            'station_ip': station.ip_address,
+            'station_port': station.port,
             'sensors': sensors_data
         })
     
     except Station.DoesNotExist:
-        return JsonResponse({'error': 'Estación no encontrada'}, status=404)
+        return JsonResponse({'error': 'Estación no encontrada o sin permiso'}, status=404)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
+
 
 @login_required
 def get_station_history(request, station_id):
@@ -470,7 +478,6 @@ def is_admin(user):
     return user.is_staff or user.is_superuser
 
 def station_queryset_for(user):
-    # Admin: todas; no admin: solo las asignadas por M2M related_users
     if is_admin(user):
         return Station.objects.all()
     return Station.objects.filter(related_users=user)
@@ -500,40 +507,32 @@ def api_settings_stations(request):
         out = []
         for s in qs:
             out.append({
-                'id': s.id,
-                'name': s.name,
-                'description': s.description or '',
-                'company_id': s.company_id,
-                'company_name': s.company.name if s.company_id else '',
+                'id': s.id, 'name': s.name, 'description': s.description or '',
+                'company_id': s.company_id, 'company_name': s.company.name if s.company_id else '',
                 'location': s.location,
                 'latitude': float(s.latitude) if s.latitude is not None else None,
                 'longitude': float(s.longitude) if s.longitude is not None else None,
+                # --- AÑADIDO ---
+                'ip_address': s.ip_address, 'port': s.port, 'mqtt_topic': s.mqtt_topic,
             })
         return JsonResponse({'results': out})
 
-    # POST (crear) -> solo admin
-    if not is_admin(user):
-        return HttpResponseForbidden("Solo administradores pueden crear estaciones.")
-    try:
-        payload = json.loads(request.body.decode('utf-8'))
-    except Exception:
-        return HttpResponseBadRequest("JSON inválido")
+    if not is_admin(user): return HttpResponseForbidden("Solo administradores pueden crear estaciones.")
+    try: payload = json.loads(request.body.decode('utf-8'))
+    except Exception: return HttpResponseBadRequest("JSON inválido")
 
     with transaction.atomic():
         s = Station.objects.create(
-            name=payload.get('name','').strip(),
-            description=payload.get('description','') or '',
-            location=payload.get('location','') or '',
-            company_id=payload.get('company_id'),
-            latitude=payload.get('latitude'),
-            longitude=payload.get('longitude'),
+            name=payload.get('name','').strip(), description=payload.get('description','') or '',
+            location=payload.get('location','') or '', company_id=payload.get('company_id'),
+            latitude=payload.get('latitude'), longitude=payload.get('longitude'),
+            # --- AÑADIDO ---
+            ip_address=payload.get('ip_address'), port=payload.get('port'), mqtt_topic=payload.get('mqtt_topic'),
+            # ---------------
             is_active=True,
         )
-        # Asignar usuarios (opcional)
         member_ids = payload.get('user_ids') or []
-        if member_ids:
-            s.related_users.set(member_ids)
-
+        if member_ids: s.related_users.set(member_ids)
         log_audit(user, 'create', 'Station', s.id, station=s, changes=payload)
     return JsonResponse({'ok': True, 'id': s.id})
 
@@ -543,52 +542,41 @@ def api_settings_stations(request):
 @require_http_methods(["GET", "PUT", "DELETE"])
 def api_settings_station_detail(request, pk):
     user = request.user
-    try:
-        s = Station.objects.get(pk=pk)
-    except Station.DoesNotExist:
-        return HttpResponseBadRequest("Estación no encontrada")
+    try: s = Station.objects.get(pk=pk)
+    except Station.DoesNotExist: return HttpResponseBadRequest("Estación no encontrada")
 
-    # permiso de acceso (no-admin solo si es miembro)
     if not is_admin(user) and not s.related_users.filter(id=user.id).exists():
         return HttpResponseForbidden("No tienes acceso a esta estación.")
 
     if request.method == "GET":
         data = {
-            'id': s.id,
-            'name': s.name,
-            'description': s.description or '',
-            'company_id': s.company_id,
-            'company_name': s.company.name if s.company_id else '',
+            'id': s.id, 'name': s.name, 'description': s.description or '',
+            'company_id': s.company_id, 'company_name': s.company.name if s.company_id else '',
             'location': s.location,
             'latitude': float(s.latitude) if s.latitude is not None else None,
             'longitude': float(s.longitude) if s.longitude is not None else None,
-            'user_ids': list(s.related_users.values_list('id', flat=True)),
-            'is_active': s.is_active,
+            # --- AÑADIDO ---
+            'ip_address': s.ip_address, 'port': s.port, 'mqtt_topic': s.mqtt_topic,
+            # ---------------
+            'user_ids': list(s.related_users.values_list('id', flat=True)), 'is_active': s.is_active,
         }
         return JsonResponse(data)
 
-    if not is_admin(user):
-        return HttpResponseForbidden("Solo administradores pueden modificar estaciones.")
-
+    if not is_admin(user): return HttpResponseForbidden("Solo administradores pueden modificar estaciones.")
     if request.method == "DELETE":
-        sid = s.id
-        s.delete()
-        log_audit(user, 'delete', 'Station', sid, changes={})
+        sid = s.id; s.delete(); log_audit(user, 'delete', 'Station', sid, changes={})
         return JsonResponse({'ok': True})
 
-    # PUT
-    try:
-        payload = json.loads(request.body.decode('utf-8'))
-    except Exception:
-        return HttpResponseBadRequest("JSON inválido")
+    try: payload = json.loads(request.body.decode('utf-8'))
+    except Exception: return HttpResponseBadRequest("JSON inválido")
 
     with transaction.atomic():
-        for f in ['name','description','location','company_id','latitude','longitude','is_active']:
-            if f in payload:
-                setattr(s, f if f!='company_id' else 'company_id', payload[f])
+        # --- AÑADIDO: 'ip_address', 'port', 'mqtt_topic' a la lista ---
+        fields_to_update = ['name','description','location','company_id','latitude','longitude','is_active', 'ip_address', 'port', 'mqtt_topic']
+        for f in fields_to_update:
+            if f in payload: setattr(s, f if f!='company_id' else 'company_id', payload[f])
         s.save()
-        if 'user_ids' in payload:
-            s.related_users.set(payload.get('user_ids') or [])
+        if 'user_ids' in payload: s.related_users.set(payload.get('user_ids') or [])
         log_audit(user, 'update', 'Station', s.id, station=s, changes=payload)
     return JsonResponse({'ok': True})
 
@@ -599,96 +587,107 @@ def api_settings_station_detail(request, pk):
 def api_settings_sensors_by_station(request):
     user = request.user
     station_id = request.GET.get('station_id')
-    if not station_id:
-        return HttpResponseBadRequest("station_id requerido")
-    # acceso
+    if not station_id: return HttpResponseBadRequest("station_id requerido")
     if not station_queryset_for(user).filter(id=station_id).exists():
         return HttpResponseForbidden("No tienes acceso a esta estación.")
 
-    sensors = Sensor.objects.filter(station_id=station_id).order_by('site','name')
+    sensors = Sensor.objects.filter(station_id=station_id).select_related('sensor_type').order_by('site','name')
     out = []
     for x in sensors:
         out.append({
-            'id': x.id,
-            'name': x.name,
-            'unit': x.sensor_type.unit if x.sensor_type_id else '',  # unidad por tipo
-            'color': x.color or '',
-            'site': x.site or '',
-            'min_value': x.min_value,
-            'max_value': x.max_value,
-            'is_active': x.is_active,
+            'id': x.id, 'name': x.name, 'unit': x.sensor_type.unit if x.sensor_type_id else '',
+            'color': x.color or '', 'site': x.site or '', 'min_value': x.min_value,
+            'max_value': x.max_value, 'is_active': x.is_active,
+            # --- AÑADIDO ---
+            'ip_address': x.ip_address, 'port': x.port, 'mqtt_topic': x.mqtt_topic,
         })
     return JsonResponse({'results': out})
 
 # --- Sensor create/update ---
+# REEMPLAZA ESTA FUNCIÓN en CoreApps/main/views.py
 @ensure_csrf_cookie
 @login_required
-@require_http_methods(["POST", "PUT"])
+@require_http_methods(["GET", "POST", "PUT"]) # Añadido "GET"
 def api_settings_sensor_detail(request, pk=None):
     user = request.user
+
+    # --- LÓGICA PARA OBTENER UN SENSOR (GET) ---
+    if request.method == 'GET':
+        if not pk:
+            return HttpResponseBadRequest("Se requiere ID de sensor.")
+        try:
+            sensor = Sensor.objects.select_related('sensor_type').get(pk=pk)
+            # Verificamos acceso
+            if not station_queryset_for(user).filter(id=sensor.station_id).exists():
+                return HttpResponseForbidden("No tienes acceso a este sensor.")
+            
+            data = {
+                'id': sensor.id,
+                'name': sensor.name,
+                'station_id': sensor.station_id,
+                'sensor_type_id': sensor.sensor_type_id,
+                'unit': sensor.sensor_type.unit if sensor.sensor_type_id else '',
+                'color': sensor.color or '',
+                'site': sensor.site or '',
+                'min_value': sensor.min_value,
+                'max_value': sensor.max_value,
+                'is_active': sensor.is_active,
+                'ip_address': sensor.ip_address,
+                'port': sensor.port,
+                'mqtt_topic': sensor.mqtt_topic,
+            }
+            return JsonResponse(data)
+        except Sensor.DoesNotExist:
+            return HttpResponseBadRequest("Sensor no encontrado")
+
+    # --- LÓGICA PARA CREAR (POST) O ACTUALIZAR (PUT) ---
     try:
         payload = json.loads(request.body.decode('utf-8'))
     except Exception:
         return HttpResponseBadRequest("JSON inválido")
 
-    # Crear sensor (solo admin)
+    # Crear sensor (POST)
     if request.method == "POST":
-        if not is_admin(user):
-            return HttpResponseForbidden("Solo administradores pueden crear sensores.")
+        if not is_admin(user): return HttpResponseForbidden("Solo administradores pueden crear sensores.")
         station_id = payload.get('station_id')
         sensor_type_id = payload.get('sensor_type_id')
-        if not station_id or not sensor_type_id:
-            return HttpResponseBadRequest("station_id y sensor_type_id son requeridos")
-        # acceso estación
-        if not station_queryset_for(user).filter(id=station_id).exists():
-            return HttpResponseForbidden("No tienes acceso a esa estación.")
+        if not station_id or not sensor_type_id: return HttpResponseBadRequest("station_id y sensor_type_id son requeridos")
+        if not station_queryset_for(user).filter(id=station_id).exists(): return HttpResponseForbidden("No tienes acceso a esa estación.")
+        
         with transaction.atomic():
             s = Sensor.objects.create(
-                station_id=station_id,
-                sensor_type_id=sensor_type_id,
+                station_id=station_id, sensor_type_id=sensor_type_id,
                 name=payload.get('name','').strip(),
                 color=payload.get('color') or '#3b82f6',
                 site=str(payload.get('site','') or ''),
-                min_value=payload.get('min_value'),
-                max_value=payload.get('max_value'),
+                min_value=payload.get('min_value'), max_value=payload.get('max_value'),
                 is_active=payload.get('is_active', True),
+                ip_address=payload.get('ip_address'), port=payload.get('port'), mqtt_topic=payload.get('mqtt_topic'),
             )
             log_audit(user, 'create', 'Sensor', s.id, station=s.station, sensor=s, changes=payload)
         return JsonResponse({'ok': True, 'id': s.id})
 
-    # PUT (editar sensor)
-    try:
-        s = Sensor.objects.get(pk=pk)
-    except Sensor.DoesNotExist:
-        return HttpResponseBadRequest("Sensor no encontrado")
-    # acceso estación
-    if not station_queryset_for(user).filter(id=s.station_id).exists():
-        return HttpResponseForbidden("No tienes acceso a esta estación.")
+    # Actualizar sensor (PUT)
+    if request.method == "PUT":
+        if not pk: return HttpResponseBadRequest("Se requiere ID de sensor.")
+        try: s = Sensor.objects.get(pk=pk)
+        except Sensor.DoesNotExist: return HttpResponseBadRequest("Sensor no encontrado")
+        if not station_queryset_for(user).filter(id=s.station_id).exists(): return HttpResponseForbidden("No tienes acceso a esta estación.")
 
-    # Campos editables:
-    if is_admin(user):
-        allowed = {'name','color','site','min_value','max_value','is_active','sensor_type_id'}
-    else:
-        # usuario no admin: solo estos (como pediste)
-        allowed = {'color','site','min_value','max_value'}
-        # unidad: viene de SensorType; si quieres que cambien unidad sin cambiar tipo,
-        # tendríamos que separar unit en Sensor; por ahora unit = sensor_type.unit (read-only)
+        if is_admin(user):
+            allowed = {'name','color','site','min_value','max_value','is_active','sensor_type_id', 'ip_address', 'port', 'mqtt_topic'}
+        else:
+            allowed = {'color','site','min_value','max_value'} # No-admin no pueden editar conectividad
 
-    changes = {}
-    with transaction.atomic():
-        for f,v in payload.items():
-            if f in allowed:
-                old = getattr(s, f)
-                if f == 'site':
-                    v = str(v) if v is not None else ''
-                if old != v:
-                    setattr(s, f, v)
-                    changes[f] = {'old': old, 'new': v}
-        if changes:
-            s.save()
-            log_audit(user, 'update', 'Sensor', s.id, station=s.station, sensor=s, changes=changes)
-    return JsonResponse({'ok': True, 'changed': list(changes.keys())})
-
+        changes = {}
+        with transaction.atomic():
+            for f,v in payload.items():
+                if f in allowed:
+                    old = getattr(s, f)
+                    if f == 'site': v = str(v) if v is not None else ''
+                    if old != v: setattr(s, f, v); changes[f] = {'old': old, 'new': v}
+            if changes: s.save(); log_audit(user, 'update', 'Sensor', s.id, station=s.station, sensor=s, changes=changes)
+        return JsonResponse({'ok': True, 'changed': list(changes.keys())})
 # --- AlertPolicy por sensor (1:1) ---
 @ensure_csrf_cookie
 @login_required
@@ -776,8 +775,7 @@ def api_settings_policy_by_sensor(request, sensor_id):
 
 @login_required
 def api_settings_sensor_types(request):
-    if request.method != 'GET':
-        return HttpResponseNotAllowed(['GET'])
+    if request.method != 'GET': return HttpResponseNotAllowed(['GET'])
     qs = SensorType.objects.all().order_by('name')
     data = [{'id': st.id, 'name': st.name, 'unit': st.unit} for st in qs]
     return JsonResponse({'results': data})

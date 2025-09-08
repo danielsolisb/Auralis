@@ -95,18 +95,23 @@ async function loadStations(){
 }
 document.getElementById('btn-new-station')?.addEventListener('click',()=>openStationModal(null));
 
-// REEMPLAZA ESTA FUNCIÓN
 async function openStationModal(id){
   const isNew=(id==null);
   const modal=buildModal(isNew?'Nueva estación':'Editar estación');
   
+  // ==================================================================
+  // SOLUCIÓN APLICADA AQUÍ
+  // La caja del modal (box) se añade DENTRO del fondo (backdrop).
+  // Luego, el backdrop (que ya contiene la caja) se añade al body.
+  // Esto asegura que el modal se centre correctamente.
   modal.backdrop.appendChild(modal.box);
   document.body.appendChild(modal.backdrop);
+  // ==================================================================
 
   let companies=[];
   try{ const c=await api('/api/settings/companies/'); companies=c.results||[]; }catch(e){}
 
-  let data={name:'',description:'',company_id:null,location:'',latitude:'',longitude:'', ip_address:'', port:'', mqtt_topic:''}; // Valor inicial para nuevos campos
+  let data={name:'',description:'',company_id:null,location:'',latitude:'',longitude:''};
   if(!isNew){ data=await api(`/api/settings/stations/${id}/`); }
 
   const form=el('div',{},[
@@ -116,14 +121,6 @@ async function openStationModal(id){
     selectGroup('Empresa','company_id',companies.map(x=>({value:String(x.id),label:x.name})), String(data.company_id||'')),
     inputGroup('Latitud','latitude',data.latitude??'','number','step="0.000001"'),
     inputGroup('Longitud','longitude',data.longitude??'','number','step="0.000001"'),
-    
-    // --- CAMPOS NUEVOS AÑADIDOS AQUÍ ---
-    el('hr'),
-    el('h5', {}, 'Conectividad (Opcional)'),
-    inputGroup('Dirección IP', 'ip_address', data.ip_address || ''),
-    inputGroup('Puerto', 'port', data.port || '', 'number'),
-    inputGroup('Topic MQTT (Estado)', 'mqtt_topic', data.mqtt_topic || ''),
-    // ------------------------------------
   ]);
   modal.body.appendChild(form);
 
@@ -133,9 +130,6 @@ async function openStationModal(id){
     p.latitude= p.latitude===''?null:Number(p.latitude);
     p.longitude=p.longitude===''?null:Number(p.longitude);
     p.company_id=p.company_id?Number(p.company_id):null;
-    // --- AÑADIDO: Aseguramos que los valores numéricos se envíen correctamente ---
-    p.port = p.port === '' ? null : Number(p.port);
-    // -------------------------------------------------------------------------
     try{
       if(isNew) await api('/api/settings/stations/','POST',p);
       else await api(`/api/settings/stations/${id}/`,'PUT',p);
@@ -250,33 +244,33 @@ function toggleCell(field, value, id){
   });
   td.appendChild(inp); return td;
 }
-
-// REEMPLAZA ESTA FUNCIÓN
-// REEMPLAZA ESTA FUNCIÓN en static/js/settings.js
 async function openSensorModal(id, stationId){
   const isNew = (id == null);
   const modal = buildModal(isNew ? 'Nuevo sensor' : 'Editar sensor');
 
+  // ==================================================================
+  // SOLUCIÓN APLICADA AQUÍ TAMBIÉN
+  // Mismo principio que en el modal de estaciones.
   modal.backdrop.appendChild(modal.box);
   document.body.appendChild(modal.backdrop);
+  // ==================================================================
 
-  // Obtenemos los datos del sensor si estamos editando
-  let sensorData = {};
-  if (!isNew) {
-    try {
-      sensorData = await api(`/api/settings/sensors/${id}/`);
-    } catch(e) {
-      alert(`Error al cargar datos del sensor: ${e.message}`);
-      return;
-    }
+  if (!isNew){
+    modal.body.appendChild(
+      el('div',{class:'alert alert-info',style:'margin:0;'},
+        'Usa la edición inline de la tabla para modificar.')
+    );
+    return;
   }
 
-  // Obtenemos los tipos de sensor para el <select>
+  if (!stationId){ alert('Selecciona estación primero.'); return; }
+
   let types = [];
-  try {
+  try{
     types = await fetchSensorTypes();
-  } catch(e) {
+  }catch(e){
     console.warn('No pude cargar tipos de sensor', e);
+    types = [];
   }
 
   const options = [{ value:'', label:'Seleccione un tipo...' }]
@@ -285,49 +279,35 @@ async function openSensorModal(id, stationId){
       label: t.unit ? `${t.name} (${t.unit})` : t.name
     })));
 
-  // Construimos el formulario, usando los datos si existen
   const form = el('div',{},[
-    inputGroup('Nombre', 'name', sensorData.name || ''),
-    selectGroup('Tipo de sensor', 'sensor_type_id', options, sensorData.sensor_type_id || ''),
-    colorGroup('Color', 'color', sensorData.color || '#3b82f6'),
-    inputGroup('Site', 'site', sensorData.site || '', 'text'),
-    inputGroup('Mín', 'min_value', sensorData.min_value, 'number', 'step="0.0001"'),
-    inputGroup('Máx', 'max_value', sensorData.max_value, 'number', 'step="0.0001"'),
-    checkboxGroup('Activo', 'is_active', isNew ? true : sensorData.is_active),
-    
-    // --- Sección de Conectividad ---
-    el('hr'),
-    el('h5', {}, 'Conectividad (Opcional)'),
-    el('p', {class: 'text-muted small', style: 'margin-top:-8px; margin-bottom:15px;'}, 'Dejar en blanco para usar la configuración de la estación.'),
-    inputGroup('Dirección IP', 'ip_address', sensorData.ip_address || ''),
-    inputGroup('Puerto', 'port', sensorData.port || '', 'number'),
-    inputGroup('Topic MQTT (Datos)', 'mqtt_topic', sensorData.mqtt_topic || ''),
+    inputGroup('Nombre','name',''),
+    selectGroup('Tipo de sensor','sensor_type_id', options, ''),
+    colorGroup('Color','color','#3b82f6'),
+    inputGroup('Site','site','', 'text'),
+    inputGroup('Mín','min_value','', 'number','step="0.0001"'),
+    inputGroup('Máx','max_value','', 'number','step="0.0001"'),
+    checkboxGroup('Activo','is_active', true),
   ]);
   modal.body.appendChild(form);
 
-  const btn = el('button',{class:'btn btn-primary'}, isNew ? 'Crear' : 'Guardar Cambios');
+  const btn = el('button',{class:'btn btn-primary'},'Crear');
   btn.onclick = async () => {
     const p = readForm(form);
-    p.station_id     = Number(stationId || sensorData.station_id);
+    p.station_id     = Number(stationId);
     p.sensor_type_id = p.sensor_type_id ? Number(p.sensor_type_id) : null;
     p.site           = (p.site || '').trim() || null;
     p.min_value      = (p.min_value === '' ? null : Number(p.min_value));
     p.max_value      = (p.max_value === '' ? null : Number(p.max_value));
     p.is_active      = !!p.is_active;
-    p.port           = p.port === '' ? null : Number(p.port);
 
     if (!p.name) return alert('El nombre es obligatorio');
     if (!p.sensor_type_id) return alert('Selecciona el tipo de sensor');
 
     try{
-      if (isNew) {
-        await api('/api/settings/sensors/','POST', p);
-      } else {
-        await api(`/api/settings/sensors/${id}/`,'PUT', p);
-      }
+      await api('/api/settings/sensors/','POST', p);
       closeModal(modal);
-      await loadSensorsForStation(String(p.station_id));
-    } catch(err) {
+      await loadSensorsForStation(String(stationId));
+    }catch(err){
       alert(err.message);
     }
   };

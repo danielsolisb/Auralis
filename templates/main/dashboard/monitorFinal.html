@@ -164,18 +164,10 @@ $(function () {
   const RANGE_MS = { '5m': 5*60*1000, '30m': 30*60*1000, '1h': 60*60*1000, '3h': 3*60*60*1000 };
   let currentRange = '5m';     // por defecto
   let isLiveMode   = true;     // autoscroll activo
-  
-  let liveUpdateTimer = null;  // Temporizador para el modo "En Vivo"
-  let topicToSensorIdMap = {};
-  let lastMessageTime = {};      // Para rastrear el último mensaje de cada sensor
+
   // Para nearestValue del tooltip que ya tienes
   let activeAxisIndex = null;
 
-
-
-// ------------------------------------
-  
-  
   // DOM
   const stationSelector  = $('#station-selector');
   const loadButton       = $('#load-sensors-btn');
@@ -190,213 +182,120 @@ $(function () {
   // ============================
   // MQTT
   // ============================
-  //initMQTTClient();
-  // ============================
-    // MQTT (Lógica de conexión y suscripción modificada)
-    // ============================
-    stationSelector.on('change', () => loadButton.prop('disabled', !stationSelector.val()));
-    loadButton.prop('disabled', !stationSelector.val());
-    loadButton.on('click', () => {
-        const stationId = stationSelector.val();
-        if (stationId) fetchAndRenderUnifiedChart(stationId);
-    });
+  initMQTTClient();
+  stationSelector.on('change', () => loadButton.prop('disabled', !stationSelector.val()));
+  loadButton.prop('disabled', !stationSelector.val());
+  loadButton.on('click', () => {
+    const stationId = stationSelector.val();
+    if (stationId) fetchAndRenderUnifiedChart(stationId);
+  });
 
-   // La conexión ahora se inicia con los datos de la estación
-   // REEMPLAZA initMQTTClient CON ESTA FUNCIÓN
-function connectAndSubscribe(brokerIp, brokerPort, topics) {
-    // Si ya estamos conectados al mismo broker, solo ajustamos suscripciones
-    if (mqttClient && mqttClient.isConnected() && mqttClient.host === brokerIp && mqttClient.port === Number(brokerPort)) {
-        unsubscribeFromAllTopics();
-        topics.forEach(topic => subscribeToTopic(topic));
-        return;
-    }
-
-    // Si hay un cliente, lo desconectamos para cambiar de broker
-    if (mqttClient) {
-        try { mqttClient.disconnect(); } catch(e) {}
-    }
-    
+  function initMQTTClient() {
     const clientId = "auralis_dashboard_" + Math.random().toString(16).substr(2, 8);
     try {
-        mqttClient = new Paho.MQTT.Client(brokerIp, Number(brokerPort), "/", clientId);
-        mqttClient.onConnectionLost = onConnectionLost;
-        mqttClient.onMessageArrived = onMessageArrived;
-        mqttClient.connect({
-            onSuccess: () => {
-                console.log(`MQTT Conectado a ${brokerIp}:${brokerPort}`);
-                topics.forEach(topic => subscribeToTopic(topic));
-            },
-            onFailure: (e) => console.error("Conexión MQTT fallida:", e.errorMessage),
-            useSSL: false,
-            keepAliveInterval: 60
-        });
+      mqttClient = new Paho.MQTT.Client("{{ mqtt_broker_ip }}", Number("{{ mqtt_broker_port }}"), "/", clientId);
+      mqttClient.onConnectionLost = onConnectionLost;
+      mqttClient.onMessageArrived = onMessageArrived;
+      mqttClient.connect({
+        onSuccess: () => console.log("MQTT Conectado"),
+        onFailure: (e) => console.error("Conexión MQTT fallida:", e),
+        useSSL: false, keepAliveInterval: 60
+      });
     } catch (e) { console.error("Error creando cliente MQTT:", e); }
-}
-    
-    function onConnectionLost(resp) {
-        if (resp.errorCode !== 0) {
-            console.log("Conexión MQTT perdida:", resp.errorMessage);
-            // Se puede agregar un reintento si se desea
-        }
+  }
+  function onConnectionLost(resp) {
+    if (resp.errorCode !== 0) {
+      console.log("Conexión MQTT perdida:", resp.errorMessage);
+      setTimeout(initMQTTClient, 5000);
     }
-
-    function subscribeToTopic(topic) {
-        if (mqttClient && mqttClient.isConnected()) {
-            console.log(`Suscribiendo a: ${topic}`);
-            mqttClient.subscribe(topic);
-            currentSubscriptions.push(topic);
-        }
+  }
+  function subscribeToTopic(topic) {
+    if (mqttClient && mqttClient.isConnected()) {
+      mqttClient.subscribe(topic);
+      currentSubscriptions.push(topic);
     }
-
-    function unsubscribeFromAllTopics() {
-        if (mqttClient && mqttClient.isConnected() && currentSubscriptions.length > 0) {
-            currentSubscriptions.forEach(t => {
-                try { mqttClient.unsubscribe(t); } catch(e) {}
-            });
-             console.log("Se desuscribió de todos los topics anteriores.");
-        }
-        currentSubscriptions = [];
-        topicToSensorIdMap = {}; // Limpiamos el mapa también
+  }
+  function unsubscribeFromAllTopics() {
+    if (mqttClient && mqttClient.isConnected()) {
+      currentSubscriptions.forEach(t => mqttClient.unsubscribe(t));
     }
-   // ============================
-    // CARGA ESTACIÓN + HISTÓRICO
-    // ============================
+    currentSubscriptions = [];
+  }
 
-// REEMPLAZA ESTA FUNCIÓN
-// REEMPLAZA ESTA FUNCIÓN
-function fetchAndRenderUnifiedChart(stationId) {
-    unsubscribeFromAllTopics();
-    stopLiveTimer(); // Detenemos cualquier timer anterior
+  // ============================
+  // CARGA ESTACIÓN + HISTÓRICO
+  // ============================
+  function fetchAndRenderUnifiedChart(stationId) {
+  unsubscribeFromAllTopics();
 
-    // Reset
-    currentStationId = stationId;
-    sensorMetadata = {}; sensorIndexById = {}; seriesBuffers = {};
-    currentSensorIds = []; activeAxisIndex = null;
-    lastMessageTime = {}; // Reiniciamos el rastreador de mensajes
-    unifiedChart.clear(); valuesPanel.empty();
-    isLiveMode = true;
-    setLiveUI(true);
+  // reset
+  currentStationId = stationId;
+  sensorMetadata = {}; sensorIndexById = {}; seriesBuffers = {};
+  currentSensorIds = []; activeAxisIndex = null;
+  unifiedChart.clear(); valuesPanel.empty();
+  isLiveMode = true;
+  setLiveUI(true);
 
-    $.getJSON(`/api/stations/${stationId}/sensors/`, function (response) {
-        if (!response.sensors || response.sensors.length === 0) {
-            valuesPanel.html('<p class="text-center">Esta estación no tiene sensores activos.</p>');
-            return;
-        }
+  $.getJSON(`/api/stations/${stationId}/sensors/`, function (response) {
+    if (!response.sensors || response.sensors.length === 0) return;
 
-        currentStationName = response.station_name;
-        $('#chart-panel-title').text(`Monitor en Tiempo Real - ${currentStationName}`);
+    currentStationName = response.station_name;
+    $('#chart-panel-title').text(`Monitor en Tiempo Real - ${currentStationName}`);
 
-        let topicsToSubscribe = [];
-
-        currentSensorIds = response.sensors.map(s => s.id);
-        response.sensors.forEach((s, i) => {
-            sensorMetadata[s.id] = s;
-            sensorIndexById[s.id] = i;
-            seriesBuffers[s.id] = [];
-            valuesPanel.append(
-               `<div class="live-card" id="live-card-${s.id}">
-                    <span class="name">${s.name}</span>
-                    <span><span class="val" id="value-display-${s.id}">--</span>
-                    <span class="unit">${s.unit || ''}</span></span>
-                </div>`
-            );
-
-            // La lógica para suscribirse solo a topics válidos (ya la tenías bien)
-            if (s.topic) {
-                topicsToSubscribe.push(s.topic);
-                topicToSensorIdMap[s.topic] = s.id;
-            } else {
-                console.warn(`Sensor "${s.name}" (ID: ${s.id}) no tiene un topic MQTT configurado.`);
-            }
-        });
-        
-        const option = buildUnifiedChartOption(response.sensors);
-        unifiedChart.setOption(option, true);
-        
-        unifiedChart.off('updateAxisPointer').on('updateAxisPointer', function (e) {
-            if (e.axesInfo && e.axesInfo.length) activeAxisIndex = e.axesInfo[0].axisIndex;
-        });
-        unifiedChart.off('dataZoom').on('dataZoom', function(){
-            const opt = unifiedChart.getOption();
-            const dz = (opt.dataZoom && opt.dataZoom.length > 1) ? opt.dataZoom[1] : null;
-            if (!dz) return;
-            const atRight = (typeof dz.end === 'number') ? (dz.end > 99) : true;
-            setLiveUI(atRight);
-            isLiveMode = atRight;
-        });
-
-        // Conexión y suscripción (he movido tu función `initMQTTClient` a esta, renombrada)
-        const brokerIp = response.station_ip || '{{ mqtt_broker_ip }}';
-        const brokerPort = response.station_port || {{ mqtt_broker_port }};
-        if (topicsToSubscribe.length > 0) {
-            connectAndSubscribe(brokerIp, brokerPort, topicsToSubscribe);
-        }
-
-        requestHistory(currentRange);
-        initRangeChips();
-        startLiveTimer(); // Iniciamos el nuevo timer al final
-
-        setTimeout(() => unifiedChart.resize(), 0);
-        $(window).off('resize._auralis').on('resize._auralis', () => unifiedChart.resize());
+    currentSensorIds = response.sensors.map(s => s.id);
+    response.sensors.forEach((s, i) => {
+      sensorMetadata[s.id] = s;
+      sensorIndexById[s.id] = i;
+      seriesBuffers[s.id] = [];
+      // tarjetas
+      valuesPanel.append(`
+        <div class="live-card" id="live-card-${s.id}">
+          <span class="name">${s.name}</span>
+          <span><span class="val" id="value-display-${s.id}">--</span>
+          <span class="unit">${s.unit || ''}</span></span>
+        </div>`);
     });
+
+    // Construir chart y setear opción base
+    const option = buildUnifiedChartOption(response.sensors);
+    unifiedChart.setOption(option, true);
+
+    // Detectar grilla activa para tooltip mixto (si lo estás usando)
+    unifiedChart.off('updateAxisPointer');
+    unifiedChart.on('updateAxisPointer', function (e) {
+      if (e.axesInfo && e.axesInfo.length) activeAxisIndex = e.axesInfo[0].axisIndex;
+    });
+
+    // Eventos para pausar/reanudar vivo según el slider
+    unifiedChart.off('dataZoom');
+    unifiedChart.on('dataZoom', function(){
+      // tomamos el slider (el segundo dataZoom que es "slider")
+      const opt = unifiedChart.getOption();
+      const dz = (opt.dataZoom && opt.dataZoom.length > 1) ? opt.dataZoom[1] : null;
+      if (!dz) return;
+      // Si el extremo derecho está “casi” al 100%, consideramos vivo.
+      const atRight = (typeof dz.end === 'number') ? (dz.end > 99) : true;
+      setLiveUI(atRight);
+      isLiveMode = atRight;
+    });
+
+    // 🔁 SUSCRIPCIÓN ÚNICA POR ESTACIÓN (wildcard): "/Estacion/+/"
+    const stationWildcard = `/${currentStationName}/+/`;
+    subscribeToTopic(stationWildcard);
+
+    // Cargar histórico PARA EL RANGO ACTUAL (5m por defecto)
+    requestHistory(currentRange);
+
+    // Chips
+    initRangeChips();
+
+    // Resize
+    setTimeout(() => unifiedChart.resize(), 0);
+    $(window).off('resize._auralis').on('resize._auralis', () => unifiedChart.resize());
+  });
 }
 
-// AÑADE ESTAS DOS NUEVAS FUNCIONES
-// AGREGA ESTAS DOS NUEVAS FUNCIONES
-function startLiveTimer() {
-    stopLiveTimer();
-    liveUpdateTimer = setInterval(() => {
-        if (!isLiveMode) return;
 
-        const now = new Date();
-        const nowMs = now.getTime();
-        let seriesUpdates = [];
-
-        currentSensorIds.forEach(id => {
-            const sensor = sensorMetadata[id];
-            // Solo nos importa si el sensor DEBERÍA estar enviando datos (tiene topic)
-            if (!sensor.topic) return;
-
-            const lastMsg = lastMessageTime[id] || 0;
-            const isOffline = (nowMs - lastMsg) > 5000; // Consideramos offline tras 5 segundos
-
-            if (isOffline) {
-                const buffer = seriesBuffers[id];
-                if (buffer && buffer.length > 0) {
-                    const lastDataPoint = buffer[buffer.length - 1];
-                    // Si el último punto no es ya un "null", añadimos uno para crear el hueco.
-                    if (lastDataPoint && lastDataPoint[1] !== null) {
-                        buffer.push([now, null]);
-                        seriesUpdates.push({ id: String(id), data: buffer });
-                    }
-                }
-            }
-        });
-        
-        // Si hubo alguna actualización (algún sensor pasó a offline), la aplicamos
-        if(seriesUpdates.length > 0) {
-            unifiedChart.setOption({ series: seriesUpdates }, false, true);
-        }
-
-        // Siempre movemos la ventana de tiempo para mantener la sincronización
-        applyWindowToDataZoom(nowMs);
-
-    }, 2000); // El marcapasos se ejecuta cada 2 segundos
-}
-
-function stopLiveTimer() {
-    if (liveUpdateTimer) {
-        clearInterval(liveUpdateTimer);
-        liveUpdateTimer = null;
-    }
-}
-
-function stopLiveTimer() {
-    if (liveUpdateTimer) {
-        clearInterval(liveUpdateTimer);
-        liveUpdateTimer = null;
-    }
-}
 
   function initRangeChips(){
     chipsWrap.find('.chip').removeClass('active');
@@ -600,7 +499,10 @@ function buildUnifiedChartOption(sensors) {
   return { animation:false, grid:grids, xAxis:xAxes, yAxis:yAxes, series, dataZoom, tooltip, graphic:graphics };
 }
 
-function findSensorByName(name) {
+
+
+
+  function findSensorByName(name) {
     const s = Object.values(sensorMetadata).find(x => x.name === name);
     return s || null;
   }
@@ -608,85 +510,58 @@ function findSensorByName(name) {
   // ============================
   // MQTT → actualizar + ventana móvil
   // ============================
-  // REEMPLAZA ESTA FUNCIÓN
-// REEMPLAZA ESTA FUNCIÓN
-// REEMPLAZA ESTA FUNCIÓN
-function onMessageArrived(message) {
-    const topic = message.destinationName;
-    const payload = message.payloadString;
-    const sensorId = topicToSensorIdMap[topic];
-    
-    if (sensorId !== undefined) {
-        const val = parseFloat(payload);
-        if (!Number.isNaN(val)) {
-            // Guardamos la hora del último mensaje para este sensor
-            lastMessageTime[sensorId] = Date.now(); 
-            updateChartData(sensorId, val);
-        }
-    }
+ function onMessageArrived(message) {
+  const rawTopic = message.destinationName;   // p.ej. "/Estacion/Sensor/" o "Estacion/Sensor/"
+  const payload  = message.payloadString;
+
+  // Normaliza: quita slashes de inicio/fin y divide
+  const cleaned = rawTopic.replace(/^\/+|\/+$/g, ''); // "/A/B/" -> "A/B"
+  const parts   = cleaned.split('/');                 // ["Estacion","Sensor",...]
+  if (parts.length < 2) return;
+
+  const stationFromTopic = parts[0];
+  const sensorFromTopic  = parts[1];
+
+  // Debe coincidir con la estación actualmente seleccionada
+  if (stationFromTopic !== currentStationName) return;
+
+  // Busca sensor por nombre de los cargados vía API
+  const sensor = Object.values(sensorMetadata).find(s => s.name === sensorFromTopic);
+  if (!sensor) return;
+
+  const val = parseFloat(payload);
+  if (Number.isNaN(val)) return;
+
+  updateChartData(sensor.id, val);
 }
 
 
-  // REEMPLAZA ESTA FUNCIÓN
-// REEMPLAZA ESTA FUNCIÓN
-function updateChartData(sensorId, value) {
+  function updateChartData(sensorId, value) {
     const now = new Date();
-    const nowMs = now.getTime();
 
-    // 1. Actualiza la tarjeta y el buffer del sensor que recibió datos
+    // Tarjeta (derecha)
     $('#value-display-' + sensorId).text(Number(value).toFixed(2));
-    const activeBuffer = seriesBuffers[sensorId];
-    activeBuffer.push([now, value]);
 
-    // 2. Prepara la actualización para ECharts
-    let seriesUpdates = [{
-        id: String(sensorId),
-        data: activeBuffer
-    }];
+    // Buffer (siempre guardamos crudo) y purga por rango
+    const buf = seriesBuffers[sensorId];
+    buf.push([now, value]);
 
-    // 3. ¡LA SOLUCIÓN! Extiende las líneas de los otros sensores
-    currentSensorIds.forEach(id => {
-        // Si es el sensor que ya actualizamos, lo saltamos
-        if (id === sensorId) return;
-
-        const buffer = seriesBuffers[id];
-        if (buffer && buffer.length > 0) {
-            // Tomamos el último valor conocido
-            const lastValue = buffer[buffer.length - 1][1];
-            // Y añadimos un nuevo punto en el tiempo actual con el MISMO valor
-            buffer.push([now, lastValue]);
-            
-            // Añadimos esta serie a la actualización también
-            seriesUpdates.push({
-                id: String(id),
-                data: buffer
-            });
-        }
-    });
-
-    // 4. Purga los datos antiguos de TODOS los buffers
+    // Purga en función del rango actual (solo si estamos en "vivo")
     if (isLiveMode) {
-        const minTime = nowMs - RANGE_MS[currentRange];
-        for (const sid in seriesBuffers) {
-            const buf = seriesBuffers[sid];
-            while (buf.length && buf[0][0].getTime() < minTime) {
-                buf.shift();
-            }
-        }
+      const minTime = now.getTime() - RANGE_MS[currentRange];
+      while (buf.length && buf[0][0].getTime() < minTime) buf.shift();
     }
 
-    // 5. Aplica todos los cambios al gráfico de una sola vez
-    unifiedChart.setOption({ series: seriesUpdates }, false, true);
+    // Actualizar serie
+    unifiedChart.setOption({ series: [{ id:String(sensorId), data: buf }] }, false, true);
 
-    // 6. Mueve la ventana de tiempo si estamos en vivo
+    // Si estamos en vivo, movemos la ventana al final (autoscroll)
     if (isLiveMode) {
-        applyWindowToDataZoom(nowMs);
+      applyWindowToDataZoom(now.getTime());
     }
-}
+  }
 
   // Busca el punto más cercano en el buffer [ [Date, value], ... ] al timestamp targetMs
-
-
 function nearestValue(buf, targetMs){
   const n = buf ? buf.length : 0;
   if (!n) return { value: null, time: null };

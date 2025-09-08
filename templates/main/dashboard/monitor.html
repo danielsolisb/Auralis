@@ -218,17 +218,29 @@ function connectAndSubscribe(brokerIp, brokerPort, topics) {
     
     const clientId = "auralis_dashboard_" + Math.random().toString(16).substr(2, 8);
     try {
-        mqttClient = new Paho.MQTT.Client(brokerIp, Number(brokerPort), "/", clientId);
-        mqttClient.onConnectionLost = onConnectionLost;
-        mqttClient.onMessageArrived = onMessageArrived;
+        //mqttClient = new Paho.MQTT.Client(brokerIp, Number(brokerPort), "/", clientId);
+        //mqttClient.onConnectionLost = onConnectionLost;
+        //mqttClient.onMessageArrived = onMessageArrived;
+        //mqttClient.connect({
+        //    onSuccess: () => {
+        //        console.log(`MQTT Conectado a ${brokerIp}:${brokerPort}`);
+        //        topics.forEach(topic => subscribeToTopic(topic));
+        //    },
+        //    onFailure: (e) => console.error("Conexión MQTT fallida:", e.errorMessage),
+        //    useSSL: false,
+        //    keepAliveInterval: 60
+        //});
+        const WS_PATH = "/mqtt";
+        const HOST = window.location.hostname;  // gasmart.ecuapulselab.com
+        const PORT = 443;
+        const USE_SSL = (location.protocol === 'https:');
+        
+        mqttClient = new Paho.MQTT.Client(HOST, Number(PORT), WS_PATH, clientId);
         mqttClient.connect({
-            onSuccess: () => {
-                console.log(`MQTT Conectado a ${brokerIp}:${brokerPort}`);
-                topics.forEach(topic => subscribeToTopic(topic));
-            },
-            onFailure: (e) => console.error("Conexión MQTT fallida:", e.errorMessage),
-            useSSL: false,
-            keepAliveInterval: 60
+          useSSL: USE_SSL,
+          keepAliveInterval: 60,
+          onSuccess: () => { /* suscripciones */ },
+          onFailure: (e) => console.error("MQTT connect failed:", e)
         });
     } catch (e) { console.error("Error creando cliente MQTT:", e); }
 }

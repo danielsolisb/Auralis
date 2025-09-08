@@ -206,29 +206,21 @@ $(function () {
 
 
 function connectAndSubscribe(brokerIp, brokerPort, topics) {
-  // Desconecta si hay cliente previo
-  if (mqttClient) {
-    try { mqttClient.disconnect(); } catch (e) {}
-  }
+  if (mqttClient) { try { mqttClient.disconnect(); } catch (e) {} }
 
-  const HOST    = window.location.hostname; // gasmart.ecuapulselab.com
+  const HOST    = window.location.hostname;
   const PORT    = 443;
   const WS_PATH = "/mqtt";
   const USE_SSL = (location.protocol === 'https:');
   const clientId = "auralis_dashboard_" + Math.random().toString(16).slice(2, 10);
 
-  // *** DEBUG: pon en false cuando termines de probar ***
   const DEBUG_ALL = true;
-
-  // Backoff para reintentos
-  let retryMs = 1000;
-  const retryMax = 15000;
+  let retryMs = 1000, retryMax = 15000;
 
   mqttClient = new Paho.MQTT.Client(HOST, Number(PORT), WS_PATH, clientId);
 
   mqttClient.onConnectionLost = function (resp) {
     console.warn("MQTT conexión perdida:", (resp && resp.errorMessage) || resp);
-    if (DEBUG_ALL) console.log("DEBUG onConnectionLost:", resp);
     setTimeout(() => {
       console.log("Reintentando conexión MQTT...");
       mqttClient.connect(connectOpts);
@@ -236,12 +228,8 @@ function connectAndSubscribe(brokerIp, brokerPort, topics) {
     }, retryMs);
   };
 
-  // *** DEBUG: loguea TODOS los mensajes crudos que lleguen ***
   mqttClient.onMessageArrived = function (m) {
-    try {
-      console.log("DEBUG msg:", m.destinationName, m.payloadString);
-    } catch (_) {}
-    // Llama a tu handler normal para que alimente el gráfico
+    try { console.log("DEBUG msg:", m.destinationName, m.payloadString); } catch (_) {}
     try { onMessageArrived(m); } catch (e) { console.error("onMessageArrived error:", e); }
   };
 
@@ -254,23 +242,15 @@ function connectAndSubscribe(brokerIp, brokerPort, topics) {
       console.log(`MQTT conectado a wss://${HOST}:${PORT}${WS_PATH}`);
       retryMs = 1000;
 
-      // Limpia suscripciones anteriores
-      if (typeof unsubscribeFromAllTopics === "function") unsubscribeFromAllTopics();
-
-      // *** DEBUG: suscribirse a TODO para ver qué llega (temporal) ***
+      // No borramos mapa ni desuscribimos aquí (se hace antes, al cambiar estación)
+      // Suscripciones
       if (DEBUG_ALL) {
-        try {
-          mqttClient.subscribe('#', { qos: 0 });
-          console.log("DEBUG: suscrito a # (todas las rutas)");
-        } catch (e) {
-          console.error("DEBUG: fallo suscribiendo a #", e);
-        }
+        try { mqttClient.subscribe('#', { qos: 0 }); console.log("DEBUG: suscrito a #"); } catch {}
       }
-
-      // Tus suscripciones reales
       topics.forEach(t => {
         try {
           mqttClient.subscribe(t, { qos: 0 });
+          currentSubscriptions.push(t); // para poder desuscribir luego
           console.log("Suscrito:", t);
         } catch (e) {
           console.error("Error al suscribir", t, e);
@@ -293,6 +273,7 @@ function connectAndSubscribe(brokerIp, brokerPort, topics) {
 
 
 
+
     function onConnectionLost(resp) {
         if (resp.errorCode !== 0) {
             console.log("Conexión MQTT perdida:", resp.errorMessage);
@@ -309,15 +290,15 @@ function connectAndSubscribe(brokerIp, brokerPort, topics) {
     }
 
     function unsubscribeFromAllTopics() {
-        if (mqttClient && mqttClient.isConnected() && currentSubscriptions.length > 0) {
-            currentSubscriptions.forEach(t => {
-                try { mqttClient.unsubscribe(t); } catch(e) {}
-            });
-             console.log("Se desuscribió de todos los topics anteriores.");
-        }
-        currentSubscriptions = [];
-        topicToSensorIdMap = {}; // Limpiamos el mapa también
-    }
+  if (mqttClient && mqttClient.isConnected() && currentSubscriptions.length > 0) {
+    currentSubscriptions.forEach(t => {
+      try { mqttClient.unsubscribe(t); } catch(e) {}
+    });
+    console.log("Se desuscribió de todos los topics anteriores.");
+  }
+  currentSubscriptions = [];
+  // ❌ NO limpiar aquí: topicToSensorIdMap = {};
+}
    // ============================
     // CARGA ESTACIÓN + HISTÓRICO
     // ============================
@@ -325,81 +306,89 @@ function connectAndSubscribe(brokerIp, brokerPort, topics) {
 // REEMPLAZA ESTA FUNCIÓN
 // REEMPLAZA ESTA FUNCIÓN
 function fetchAndRenderUnifiedChart(stationId) {
-    unsubscribeFromAllTopics();
-    stopLiveTimer(); // Detenemos cualquier timer anterior
+  unsubscribeFromAllTopics();
+  stopLiveTimer();
 
-    // Reset
-    currentStationId = stationId;
-    sensorMetadata = {}; sensorIndexById = {}; seriesBuffers = {};
-    currentSensorIds = []; activeAxisIndex = null;
-    lastMessageTime = {}; // Reiniciamos el rastreador de mensajes
-    unifiedChart.clear(); valuesPanel.empty();
-    isLiveMode = true;
-    setLiveUI(true);
+  // Reset
+  currentStationId = stationId;
+  sensorMetadata = {}; sensorIndexById = {}; seriesBuffers = {};
+  currentSensorIds = []; activeAxisIndex = null;
+  lastMessageTime = {};
+  topicToSensorIdMap = {};              // 🔑 limpiamos el mapa aquí
+  unifiedChart.clear(); valuesPanel.empty();
+  isLiveMode = true;
+  setLiveUI(true);
 
-    $.getJSON(`/api/stations/${stationId}/sensors/`, function (response) {
-        if (!response.sensors || response.sensors.length === 0) {
-            valuesPanel.html('<p class="text-center">Esta estación no tiene sensores activos.</p>');
-            return;
-        }
+  $.getJSON(`/api/stations/${stationId}/sensors/`, function (response) {
+    if (!response.sensors || response.sensors.length === 0) {
+      valuesPanel.html('<p class="text-center">Esta estación no tiene sensores activos.</p>');
+      return;
+    }
 
-        currentStationName = response.station_name;
-        $('#chart-panel-title').text(`Monitor en Tiempo Real - ${currentStationName}`);
+    currentStationName = response.station_name;
+    $('#chart-panel-title').text(`Monitor en Tiempo Real - ${currentStationName}`);
 
-        let topicsToSubscribe = [];
+    let topicsToSubscribe = [];
+    currentSensorIds = response.sensors.map(s => s.id);
 
-        currentSensorIds = response.sensors.map(s => s.id);
-        response.sensors.forEach((s, i) => {
-            sensorMetadata[s.id] = s;
-            sensorIndexById[s.id] = i;
-            seriesBuffers[s.id] = [];
-            valuesPanel.append(
-               `<div class="live-card" id="live-card-${s.id}">
-                    <span class="name">${s.name}</span>
-                    <span><span class="val" id="value-display-${s.id}">--</span>
-                    <span class="unit">${s.unit || ''}</span></span>
-                </div>`
-            );
+    response.sensors.forEach((s, i) => {
+      sensorMetadata[s.id] = s;
+      sensorIndexById[s.id] = i;
+      seriesBuffers[s.id] = [];
 
-            // La lógica para suscribirse solo a topics válidos (ya la tenías bien)
-            if (s.topic) {
-                topicsToSubscribe.push(s.topic);
-                topicToSensorIdMap[s.topic] = s.id;
-            } else {
-                console.warn(`Sensor "${s.name}" (ID: ${s.id}) no tiene un topic MQTT configurado.`);
-            }
-        });
-        
-        const option = buildUnifiedChartOption(response.sensors);
-        unifiedChart.setOption(option, true);
-        
-        unifiedChart.off('updateAxisPointer').on('updateAxisPointer', function (e) {
-            if (e.axesInfo && e.axesInfo.length) activeAxisIndex = e.axesInfo[0].axisIndex;
-        });
-        unifiedChart.off('dataZoom').on('dataZoom', function(){
-            const opt = unifiedChart.getOption();
-            const dz = (opt.dataZoom && opt.dataZoom.length > 1) ? opt.dataZoom[1] : null;
-            if (!dz) return;
-            const atRight = (typeof dz.end === 'number') ? (dz.end > 99) : true;
-            setLiveUI(atRight);
-            isLiveMode = atRight;
-        });
+      valuesPanel.append(
+        `<div class="live-card" id="live-card-${s.id}">
+           <span class="name">${s.name}</span>
+           <span><span class="val" id="value-display-${s.id}">--</span>
+           <span class="unit">${s.unit || ''}</span></span>
+         </div>`
+      );
 
-        // Conexión y suscripción (he movido tu función `initMQTTClient` a esta, renombrada)
-        const brokerIp = response.station_ip || '{{ mqtt_broker_ip }}';
-        const brokerPort = response.station_port || {{ mqtt_broker_port }};
-        if (topicsToSubscribe.length > 0) {
-            connectAndSubscribe(brokerIp, brokerPort, topicsToSubscribe);
-        }
+      if (s.topic) {
+        const t = String(s.topic).trim();
 
-        requestHistory(currentRange);
-        initRangeChips();
-        startLiveTimer(); // Iniciamos el nuevo timer al final
+        // Suscribimos exactamente lo que devuelve la API
+        topicsToSubscribe.push(t);
 
-        setTimeout(() => unifiedChart.resize(), 0);
-        $(window).off('resize._auralis').on('resize._auralis', () => unifiedChart.resize());
+        // 🔑 Guardamos varias claves equivalentes para evitar misses
+        topicToSensorIdMap[t] = s.id;
+        if (t.endsWith('/')) topicToSensorIdMap[t.slice(0, -1)] = s.id;
+        else                 topicToSensorIdMap[t + '/']        = s.id;
+      } else {
+        console.warn(`Sensor "${s.name}" (ID: ${s.id}) no tiene un topic MQTT configurado.`);
+      }
     });
+
+    const option = buildUnifiedChartOption(response.sensors);
+    unifiedChart.setOption(option, true);
+
+    unifiedChart.off('updateAxisPointer').on('updateAxisPointer', function (e) {
+      if (e.axesInfo && e.axesInfo.length) activeAxisIndex = e.axesInfo[0].axisIndex;
+    });
+    unifiedChart.off('dataZoom').on('dataZoom', function(){
+      const opt = unifiedChart.getOption();
+      const dz = (opt.dataZoom && opt.dataZoom.length > 1) ? opt.dataZoom[1] : null;
+      if (!dz) return;
+      const atRight = (typeof dz.end === 'number') ? (dz.end > 99) : true;
+      setLiveUI(atRight);
+      isLiveMode = atRight;
+    });
+
+    const brokerIp   = response.station_ip   || '{{ mqtt_broker_ip }}';
+    const brokerPort = response.station_port || {{ mqtt_broker_port }};
+    if (topicsToSubscribe.length > 0) {
+      connectAndSubscribe(brokerIp, brokerPort, topicsToSubscribe);
+    }
+
+    requestHistory(currentRange);
+    initRangeChips();
+    startLiveTimer();
+
+    setTimeout(() => unifiedChart.resize(), 0);
+    $(window).off('resize._auralis').on('resize._auralis', () => unifiedChart.resize());
+  });
 }
+
 
 // AÑADE ESTAS DOS NUEVAS FUNCIONES
 // AGREGA ESTAS DOS NUEVAS FUNCIONES
@@ -672,19 +661,33 @@ function findSensorByName(name) {
 // REEMPLAZA ESTA FUNCIÓN
 // REEMPLAZA ESTA FUNCIÓN
 function onMessageArrived(message) {
-    const topic = message.destinationName;
-    const payload = message.payloadString;
-    const sensorId = topicToSensorIdMap[topic];
-    
-    if (sensorId !== undefined) {
-        const val = parseFloat(payload);
-        if (!Number.isNaN(val)) {
-            // Guardamos la hora del último mensaje para este sensor
-            lastMessageTime[sensorId] = Date.now(); 
-            updateChartData(sensorId, val);
-        }
+  const rawTopic = message.destinationName;
+  const payload  = message.payloadString;
+
+  // Probamos las variantes sin tocar la API
+  const keysToTry = [rawTopic];
+  if (rawTopic.endsWith('/')) keysToTry.push(rawTopic.slice(0, -1));
+  else                        keysToTry.push(rawTopic + '/');
+
+  let sensorId;
+  for (const k of keysToTry) {
+    if (k in topicToSensorIdMap) { sensorId = topicToSensorIdMap[k]; break; }
+  }
+
+  if (sensorId !== undefined) {
+    const val = parseFloat(payload);
+    if (!Number.isNaN(val)) {
+      lastMessageTime[sensorId] = Date.now();
+      // (opcional) visibilidad del flujo
+      // console.log("→ hit", rawTopic, "-> sensor", sensorId, "=", val);
+      updateChartData(sensorId, val);
     }
+  } else {
+    // (opcional) ver misses:
+    // console.warn("Topic no mapeado:", rawTopic);
+  }
 }
+
 
 
   // REEMPLAZA ESTA FUNCIÓN

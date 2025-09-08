@@ -465,27 +465,27 @@ function applyHistory(historyData){
   try { mqttClient?.disconnect(); } catch (_) {}
   mqttClient = null;
 
-  // Mapa topic -> sensorId (tal cual viene de la API)
+  // Mapa topic -> sensorId según lo que devuelve tu API (sin tocar las barras)
   const topicMap = new Map();
   sensors.forEach(s => {
     const t = (s.mqtt_topic ?? s.topic) || null;
     if (t) topicMap.set(t, s.id);
   });
 
-  // Siempre a través del proxy HTTPS del sitio
-  const USE_SSL = (location.protocol === 'https:');
-  const HOST    = window.location.hostname;       // p.ej. gasmart.ecuapulselab.com
-  const URI     = `${USE_SSL ? 'wss' : 'ws'}://${HOST}/mqtt`;  // puerto 443 implícito en wss
-
+  // Igual que en monitor.html: proxys WSS por Nginx en /mqtt (puerto 443)
+  const HOST     = window.location.hostname;            // p.ej. gasmart.ecuapulselab.com
+  const PORT     = 443;
+  const WS_PATH  = "/mqtt";
+  const USE_SSL  = (location.protocol === "https:");
   const clientId = "montec_" + Math.random().toString(16).slice(2, 10);
 
-  // 👇 Usar la firma por URI evita ambigüedades de host/puerto/path
-  mqttClient = new Paho.MQTT.Client(URI, clientId);
+  // ⬇️ Constructor de 4 argumentos (estable)
+  mqttClient = new Paho.MQTT.Client(HOST, Number(PORT), WS_PATH, clientId);
   mqttClient._topicMap = topicMap;
 
   // Handlers
   mqttClient.onMessageArrived = onMessageArrived;
-  mqttClient.onConnectionLost  = (resp) => {
+  mqttClient.onConnectionLost = (resp) => {
     console.warn("MQTT desconectado:", resp?.errorMessage || resp);
   };
 
@@ -495,8 +495,8 @@ function applyHistory(historyData){
     keepAliveInterval: 60,
     timeout: 8,
     onSuccess: () => {
-      console.log("MQTT conectado a", URI);
-      // Suscribirse a todos los tópicos configurados
+      console.log(`MQTT conectado a wss://${HOST}:${PORT}${WS_PATH}`);
+      // Suscripciones EXACTAS a los topics de la API
       topicMap.forEach((_, t) => {
         try {
           mqttClient.subscribe(t, { qos: 0 });
@@ -505,15 +505,19 @@ function applyHistory(historyData){
           console.error("Error suscribiendo", t, e);
         }
       });
+
+      // (opcional) debug para ver todo lo que llega
+      // try { mqttClient.subscribe('#', { qos: 0 }); console.log("DEBUG: suscrito a #"); } catch {}
     },
     onFailure: (e) => {
       console.error("MQTT conexión fallida", e);
     }
   };
 
-  console.log("Conectando MQTT por", URI, "…");
+  console.log("Conectando MQTT por WSS vía /mqtt …");
   mqttClient.connect(connectOpts);
 }
+
 
 
 

@@ -460,76 +460,61 @@ function applyHistory(historyData){
   // MQTT
   // ============================
   
-  function subscribeStation(stationConn){
-  // Cierra cliente previo (si lo hay)
-  try { mqttClient?.disconnect(); } catch(_) {}
+  function subscribeStation(stationConn) {
+  // Cierra cliente previo
+  try { mqttClient?.disconnect(); } catch (_) {}
   mqttClient = null;
 
-  // Mapa topic -> sensorId exactamente como viene de la BD
+  // Mapa topic -> sensorId (tal cual viene de la API)
   const topicMap = new Map();
   sensors.forEach(s => {
-    if (s.mqtt_topic && typeof s.mqtt_topic === 'string') {
-      topicMap.set(s.mqtt_topic, s.id);
-    }
+    const t = (s.mqtt_topic ?? s.topic) || null;
+    if (t) topicMap.set(t, s.id);
   });
-  const hasTopics = topicMap.size > 0;
 
-  // Nos vamos SIEMPRE por el proxy HTTPS del sitio (WSS)
-  const HOST    = window.location.hostname;   // p.ej. gasmart.ecuapulselab.com
-  const PORT    = 443;
-  const WS_PATH = "/mqtt";
-  const USE_SSL = (location.protocol === "https:");
+  // Siempre a través del proxy HTTPS del sitio
+  const USE_SSL = (location.protocol === 'https:');
+  const HOST    = window.location.hostname;       // p.ej. gasmart.ecuapulselab.com
+  const URI     = `${USE_SSL ? 'wss' : 'ws'}://${HOST}/mqtt`;  // puerto 443 implícito en wss
 
   const clientId = "montec_" + Math.random().toString(16).slice(2, 10);
-  mqttClient = new Paho.MQTT.Client(HOST, Number(PORT), WS_PATH, clientId);
+
+  // 👇 Usar la firma por URI evita ambigüedades de host/puerto/path
+  mqttClient = new Paho.MQTT.Client(URI, clientId);
   mqttClient._topicMap = topicMap;
 
+  // Handlers
   mqttClient.onMessageArrived = onMessageArrived;
-
-  // reintento con backoff suave
-  let retryMs = 1000, retryMax = 15000;
-  const reconnect = () => {
-    setTimeout(() => {
-      retryMs = Math.min(retryMs * 2, retryMax);
-      try { subscribeStation(stationConn); } catch(e) { console.error(e); }
-    }, retryMs);
-  };
-
-  mqttClient.onConnectionLost = (resp) => {
+  mqttClient.onConnectionLost  = (resp) => {
     console.warn("MQTT desconectado:", resp?.errorMessage || resp);
-    reconnect();
   };
 
   const connectOpts = {
     useSSL: USE_SSL,
+    cleanSession: true,
     keepAliveInterval: 60,
     timeout: 8,
-    cleanSession: true,
     onSuccess: () => {
-      console.log(`MQTT conectado a wss://${HOST}:${PORT}${WS_PATH}`);
-      retryMs = 1000; // reset backoff
-
-      if (hasTopics) {
-        topicMap.forEach((_, t) => {
-          try { mqttClient.subscribe(t, { qos: 0 }); console.log("Suscrito:", t); }
-          catch(e){ console.error("Error suscribiendo", t, e); }
-        });
-      } else {
-        // Patrón legado si algún sensor no tiene topic en BD
-        const legacy = `/${currentStationName}/+/`;
-        try { mqttClient.subscribe(legacy, { qos: 0 }); console.log("Suscrito (legado):", legacy); }
-        catch(e){ console.error("Error suscribiendo legado", legacy, e); }
-      }
+      console.log("MQTT conectado a", URI);
+      // Suscribirse a todos los tópicos configurados
+      topicMap.forEach((_, t) => {
+        try {
+          mqttClient.subscribe(t, { qos: 0 });
+          console.log("Suscrito:", t);
+        } catch (e) {
+          console.error("Error suscribiendo", t, e);
+        }
+      });
     },
     onFailure: (e) => {
-      console.error("MQTT connect failed:", e?.errorMessage || e);
-      reconnect();
+      console.error("MQTT conexión fallida", e);
     }
   };
 
-  console.log("Conectando MQTT por WSS vía /mqtt …");
+  console.log("Conectando MQTT por", URI, "…");
   mqttClient.connect(connectOpts);
 }
+
 
 
 

@@ -67,20 +67,6 @@ class Station(models.Model):
         verbose_name=_('usuarios asociados'),
         blank=True
     )
-    #owner = models.ForeignKey(
-    #    settings.AUTH_USER_MODEL,
-    #    on_delete=models.PROTECT,
-    #    related_name='owned_stations',
-    #    verbose_name=_('propietario'),
-    #    limit_choices_to={'user_type': 'CL'}
-    #)
-    #supervisors = models.ManyToManyField(
-    #    settings.AUTH_USER_MODEL,
-    #    related_name='supervised_stations',
-    #    verbose_name=_('supervisores'),
-    #    limit_choices_to={'user_type': 'SV'},
-    #    blank=True  # Hacemos el campo opcional
-    #)
     is_active = models.BooleanField(
         _('activo'),
         default=True
@@ -126,15 +112,6 @@ class Station(models.Model):
                         )
                     })
 
-    #def clean(self):
-    #    super().clean()
-    #    # Solo validar supervisores si la estación ya existe (tiene ID)
-    #    if self.pk and self.supervisors.exists():
-    #        for supervisor in self.supervisors.all():
-    #            if supervisor.company != self.owner.company:
-    #                raise ValidationError({
-    #                    'supervisors': _('Los supervisores deben pertenecer a la misma empresa que el propietario')
-    #                })
 
 class SensorType(models.Model):
     name = models.CharField(

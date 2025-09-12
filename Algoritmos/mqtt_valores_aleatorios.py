@@ -34,16 +34,16 @@ def make_topic(station: str, sensor: str) -> str:
 # ========================
 
 def gen_current() -> str:          # A
-    return f"{random.uniform(10, 11):.2f}"
+    return f"{random.uniform(20, 22):.2f}"
 
 def gen_pressure_1k() -> str:      # PSI ~ 0..1000
-    return f"{random.uniform(650, 654):.2f}"
+    return f"{random.uniform(400, 500):.2f}"
 
 def gen_pressure_2k() -> str:      # PSI ~ 0..1000
-    return f"{random.uniform(628, 640):.2f}"
+    return f"{random.uniform(343, 360):.2f}"
 
 def gen_frequency() -> str:        # Hz
-    return f"{random.uniform(20, 24):.2f}"
+    return f"{random.uniform(26, 30):.2f}"
 
 # --- Helper para variaciones suaves (random walk acotado) ---
 def make_smooth_gen(

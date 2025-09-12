@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     'widget_tweaks',  # Asegúrate que esta línea existe
     'CoreApps.main',
     'CoreApps.events',
+    'CoreApps.rulesengine', #Base para nuevas reglas de alertas inteligentes
 ]
 
 # Configuración del modelo de usuario personalizado

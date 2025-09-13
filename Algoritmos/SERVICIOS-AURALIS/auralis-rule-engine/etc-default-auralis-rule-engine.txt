@@ -1,0 +1,29 @@
+# /etc/default/auralis-rule-engine
+# Archivo de configuración para el nuevo servicio Auralis Rule Engine.
+
+# --- Configuración de la Base de Datos ---
+DB_HOST=34.30.17.212
+DB_PORT=3306
+DB_NAME=Auralis
+DB_USER=root
+DB_PASSWORD=daniel586
+
+# --- Configuración de MQTT ---
+MQTT_BROKER_HOST=34.30.17.212
+MQTT_BROKER_PORT=1883
+MQTT_USERNAME=
+MQTT_PASSWORD=
+MQTT_CLIENT_ID_MANAGER=auralis-rule-manager-prod
+
+# --- Configuración de Redis ---
+REDIS_HOST=127.0.0.1
+REDIS_PORT=6379
+REDIS_DB=0
+
+# --- Configuración de Sincronización (en segundos) ---
+SYNC_INTERVAL_TOPICS=10
+SYNC_INTERVAL_RULES=300
+
+# --- Variables Adicionales ---
+LOG_LEVEL=INFO
+TZ_NAME=America/Guayaquil

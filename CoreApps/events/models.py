@@ -35,7 +35,7 @@ class BaseEvent(models.Model):
     )
     resolution_notes = models.TextField(
         _('notas de resolución'),
-        blank=True
+        blank=True, null=True
     )
 
     class Meta:

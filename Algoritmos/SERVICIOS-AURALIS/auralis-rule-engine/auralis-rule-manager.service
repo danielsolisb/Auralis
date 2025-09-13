@@ -1,0 +1,14 @@
+[Unit]
+Description=Auralis Rule Engine - Topic Manager
+After=network.target mysql.service redis-server.service
+
+[Service]
+User=dsb586
+Group=dsb586
+WorkingDirectory=/opt/auralis-rule-engine
+ExecStart=/opt/auralis-rule-engine/venv/bin/python -m src.topic_manager
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

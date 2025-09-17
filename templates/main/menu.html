@@ -160,7 +160,12 @@
 						            </li>
 						
 						            <!--Menu list item-->
-						            
+						            <li {% if title == 'Editor de Reglas' %}class="active-sub"{% endif %}>
+                                        <a href="{% url 'rulesengine:rulesengine-editor' %}">
+                                            <i class="pli-pen-4"></i>
+                                            <span class="menu-title">Editor de Reglas</span>
+                                        </a>
+                                    </li>
 						
 						            <!--Menu list item-->
 						            <li>

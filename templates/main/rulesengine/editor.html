@@ -1,0 +1,60 @@
+{% extends 'main/dashboard.html' %}
+{% load static %}
+
+{% block content %}
+<div id="content-container">
+    <div id="page-content">
+        <div class="panel">
+            <div class="panel-heading">
+                <div class="panel-control">
+                    <select id="rules-dropdown" class="form-control" style="width: 250px; display: inline-block; margin-right: 15px;"></select>
+                    <button id="btn-new-rule" class="btn btn-success btn-sm">Nueva Regla</button>
+                    <button id="btn-save-rule" class="btn btn-primary btn-sm">Guardar</button>
+                </div>
+                <h3 class="panel-title">Editor de Reglas Visual</h3>
+            </div>
+            <div class="panel-body">
+                <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/jerosoler/Drawflow/dist/drawflow.min.css">
+                <style>
+                    #drawflow { width: 100%; height: 75vh; border: 1px solid #444; background-color: #2d343c; }
+                    .drawflow-node { border-radius: 8px !important; background: #4e4e4e !important; color: white !important; border: 1px solid #666 !important; width: 250px !important; }
+                    .drawflow-node .title-box { background: #3d3d3d !important; height: 40px !important; line-height: 40px !important; }
+                    .drawflow .drawflow-node .inputs, .drawflow .drawflow-node .outputs { margin-top: 15px !important;}
+                    .drawflow-node .input, .drawflow-node .output { height: 25px !important; width: 25px !important; }
+                    .main-content { padding: 10px; }
+                    .main-content select, .main-content input { color: #333; width: 100%; margin-top: 5px; box-sizing: border-box; }
+                    
+                    /* Estilos para el Menú Contextual */
+                    #context-menu {
+                        display: none; position: absolute; background-color: #f1f1f1;
+                        min-width: 220px; box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
+                        padding: 5px 0; z-index: 1000; border-radius: 5px;
+                    }
+                    #context-menu a { color: black; padding: 8px 16px; text-decoration: none; display: block; }
+                    #context-menu a:hover { background-color: #ddd; }
+                </style>
+
+                <div id="context-menu"></div>
+
+                <div id="drawflow"></div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+
+{% block page_script %}
+{{ block.super }}
+
+<script src="https://cdn.jsdelivr.net/gh/jerosoler/Drawflow/dist/drawflow.min.js"></script>
+
+<script id="editor-config"
+        data-api-rules-url="{% url 'rulesengine-api:rule-list' %}"
+        data-api-sensors-url="{% url 'rulesengine-api:api-sensor-list' %}"
+        data-api-policies-url="{% url 'rulesengine-api:api-alertpolicy-list' %}"
+        data-csrf-token="{{ csrf_token }}">
+</script>
+
+<script src="{% static 'js/rule_editor.js' %}"></script>
+{% endblock %}

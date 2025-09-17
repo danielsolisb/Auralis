@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     'CoreApps.main',
     'CoreApps.events',
     'CoreApps.rulesengine', #Base para nuevas reglas de alertas inteligentes
+    'rest_framework', 
 ]
 
 # Configuración del modelo de usuario personalizado

@@ -21,7 +21,7 @@ class TopicManager:
             logging.info("Conectado exitosamente al broker MQTT.")
             self.sync_topics()
         else:
-            logging.error(f"Fallo al conectar al broker MQTT, código de retorno: {rc}")
+            logging.error(f"Fallo al conectar al broker MQTT, código: {rc}")
 
     def on_message(self, client, userdata, msg):
         try:
@@ -37,8 +37,6 @@ class TopicManager:
                     'timestamp': time.time()
                 }
                 self.redis_client.lpush(config.REDIS_QUEUE_NAME, json.dumps(message_data))
-            else:
-                logging.warning(f"Mensaje recibido en un tópico no mapeado: {topic}")
         except (ValueError, UnicodeDecodeError) as e:
             logging.error(f"Error al procesar mensaje de {msg.topic}: {e}")
         except Exception as e:
@@ -47,9 +45,7 @@ class TopicManager:
     def sync_topics(self):
         logging.info("Iniciando sincronización de tópicos...")
         connection = db.get_db_connection()
-        if not connection:
-            logging.error("No se pudo conectar a la base de datos para sincronizar tópicos.")
-            return
+        if not connection: return
         try:
             with connection.cursor() as cursor:
                 query = "SELECT id, mqtt_topic FROM sensorhub_sensor WHERE mqtt_topic IS NOT NULL AND mqtt_topic != '' AND is_active = TRUE"
@@ -57,18 +53,22 @@ class TopicManager:
                 results = cursor.fetchall()
         finally:
             connection.close()
+
         new_topic_map = {row['mqtt_topic']: row['id'] for row in results}
         current_topics = set(self.topic_map.keys())
         new_topics = set(new_topic_map.keys())
         topics_to_subscribe = new_topics - current_topics
         topics_to_unsubscribe = current_topics - new_topics
+
         if topics_to_subscribe:
             subscription_list = [(topic, 0) for topic in topics_to_subscribe]
             logging.info(f"Suscribiendo a {len(subscription_list)} nuevos tópicos.")
             self.mqtt_client.subscribe(subscription_list)
+
         if topics_to_unsubscribe:
             logging.info(f"Desuscribiendo de {len(topics_to_unsubscribe)} tópicos obsoletos.")
             self.mqtt_client.unsubscribe(list(topics_to_unsubscribe))
+
         self.topic_map = new_topic_map
         logging.info(f"Sincronización completada. {len(self.topic_map)} tópicos activos.")
 
@@ -82,11 +82,13 @@ class TopicManager:
         self.mqtt_client.on_message = self.on_message
         if config.MQTT_USERNAME and config.MQTT_PASSWORD:
             self.mqtt_client.username_pw_set(config.MQTT_USERNAME, config.MQTT_PASSWORD)
+
         try:
             self.mqtt_client.connect(config.MQTT_BROKER_HOST, config.MQTT_BROKER_PORT, config.MQTT_KEEPALIVE)
         except Exception as e:
             logging.error(f"No se pudo conectar al broker MQTT: {e}")
             return
+
         sync_thread = Thread(target=self.sync_loop)
         sync_thread.daemon = True
         sync_thread.start()

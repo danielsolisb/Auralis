@@ -5,7 +5,8 @@ from django.utils.translation import gettext_lazy as _
 
 # Importamos los modelos de otras aplicaciones con los que nos vamos a relacionar
 from CoreApps.users.models import Company
-from CoreApps.sensorhub.models import Sensor
+#from CoreApps.sensorhub.models import Sensor
+from CoreApps.sensorhub.models import Sensor, AlertPolicy
 
 class Rule(models.Model):
     """
@@ -62,16 +63,14 @@ class Rule(models.Model):
 
 
 class Condition(models.Model):
-    """
-    Representa una única condición lógica que se evalúa contra un dato de un sensor.
-    Ej: "La temperatura del Sensor 'CPU-Temp' es mayor que 80°C"
-    """
+    # --- AÑADIMOS ESTA CLASE INTERNA ---
+    class ThresholdType(models.TextChoices):
+        STATIC = 'STATIC', _("Estático (valor fijo)")
+        POLICY = 'POLICY', _("Dinámico (desde una Política de Alerta)")
+
     class MetricChoices(models.TextChoices):
         CURRENT_VALUE = "VALUE", _("Valor Actual")
         RATE_OF_CHANGE = "ROC", _("Ritmo de Cambio (valor/tiempo)")
-        # --- Opciones para la Fase 2 (Inteligencia Artificial) ---
-        # ANOMALY_SCORE = "ANOMALY", _("Puntuación de Anomalía")
-        # PREDICTED_VALUE = "PREDICT", _("Valor Predicho")
 
     class OperatorChoices(models.TextChoices):
         GREATER_THAN = ">", _("Mayor que")
@@ -103,11 +102,33 @@ class Condition(models.Model):
         choices=OperatorChoices.choices,
         default=OperatorChoices.GREATER_THAN
     )
-    threshold_config = models.JSONField(
-        _('configuración de umbrales'),
-        default=dict,
-        help_text=_("Valores de umbral en formato JSON. Ej: {'type': 'STATIC', 'value': 30} o {'type': 'TIME_BASED', 'weekday_value': 25, 'weekend_value': 28}")
+
+    # --- AÑADIMOS ESTE CAMPO ---
+    threshold_type = models.CharField(
+        _('tipo de umbral'),
+        max_length=10,
+        choices=ThresholdType.choices,
+        default=ThresholdType.STATIC
     )
+    
+    # Modificamos el help_text de este campo existente
+    threshold_config = models.JSONField(
+        _('configuración de umbral estático'),
+        default=dict,
+        blank=True, # Lo hacemos opcional
+        help_text=_("Usar solo si el tipo de umbral es 'Estático'. Ej: {'value': 30}")
+    )
+
+    # --- AÑADIMOS ESTE CAMPO (EL "PUENTE") ---
+    linked_policy = models.ForeignKey(
+        AlertPolicy,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name=_('política de alerta vinculada'),
+        help_text=_("Usar solo si el tipo de umbral es 'Dinámico'.")
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

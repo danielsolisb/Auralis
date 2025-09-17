@@ -5,16 +5,24 @@ from .models import Rule, Condition, RuleNode
 
 @admin.register(Condition)
 class ConditionAdmin(admin.ModelAdmin):
-    list_display = ('name', 'source_sensor', 'metric_to_evaluate', 'operator', 'updated_at')
-    list_filter = ('metric_to_evaluate', 'operator', 'source_sensor__station')
-    search_fields = ('name', 'description', 'source_sensor__name')
+    # Añadimos 'threshold_type' para verlo en la lista
+    list_display = ('name', 'source_sensor', 'threshold_type', 'operator', 'updated_at')
+    list_filter = ('threshold_type', 'metric_to_evaluate', 'operator', 'source_sensor__station')
+    search_fields = ('name', 'source_sensor__name')
     list_per_page = 25
+    
+    # Reorganizamos los campos para que sean más intuitivos en el formulario
     fieldsets = (
         (None, {
             'fields': ('name', 'source_sensor')
         }),
         ('Lógica de Evaluación', {
-            'fields': ('metric_to_evaluate', 'operator', 'threshold_config')
+            'fields': ('metric_to_evaluate', 'operator')
+        }),
+        # Nueva sección para elegir el tipo de umbral
+        ('Fuente del Umbral', {
+            'description': "Elija el tipo de umbral y rellene solo el campo correspondiente.",
+            'fields': ('threshold_type', 'threshold_config', 'linked_policy')
         }),
     )
 

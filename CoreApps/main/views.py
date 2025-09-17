@@ -421,8 +421,12 @@ def get_station_data(request):
                 'max_timestamp': None, 'min_timestamp': None,
             })
 
-        alarm_count = Alarm.objects.filter(sensor=sensor, timestamp__range=[start_dt, end_dt]).count()
-        warning_count = Warning.objects.filter(sensor=sensor, timestamp__range=[start_dt, end_dt]).count()
+        # --- INICIO DE LA CORRECCIÓN ---
+        # Cambiamos 'timestamp__range' por 'started_at__range'
+        alarm_count = Alarm.objects.filter(sensor=sensor, started_at__range=[start_dt, end_dt]).count()
+        warning_count = Warning.objects.filter(sensor=sensor, started_at__range=[start_dt, end_dt]).count()
+        # --- FIN DE LA CORRECCIÓN ---
+        
         summary['total_alarms'] = alarm_count
         summary['total_warnings'] = warning_count
 

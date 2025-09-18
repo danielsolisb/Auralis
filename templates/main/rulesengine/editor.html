@@ -7,6 +7,16 @@
         <div class="panel">
             <div class="panel-heading">
                 <div class="panel-control">
+                    <!-- Controles de Zoom -->
+                    <div class="btn-group" style="margin-right: 15px;">
+                        <button id="zoom-in-btn" class="btn btn-default btn-sm"><i class="fa fa-search-plus"></i></button>
+                        <button id="zoom-out-btn" class="btn btn-default btn-sm"><i class="fa fa-search-minus"></i></button>
+                        <button id="zoom-reset-btn" class="btn btn-default btn-sm">100%</button>
+                    </div>
+
+                    <!-- NUEVO: Dropdown para filtrar por Estación -->
+                    <select id="stations-dropdown" class="form-control" style="width: 250px; display: inline-block; margin-right: 10px;"></select>
+                    
                     <select id="rules-dropdown" class="form-control" style="width: 250px; display: inline-block; margin-right: 15px;"></select>
                     <button id="btn-new-rule" class="btn btn-success btn-sm">Nueva Regla</button>
                     <button id="btn-save-rule" class="btn btn-primary btn-sm">Guardar</button>
@@ -16,15 +26,53 @@
             <div class="panel-body">
                 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/jerosoler/Drawflow/dist/drawflow.min.css">
                 <style>
-                    #drawflow { width: 100%; height: 75vh; border: 1px solid #444; background-color: #2d343c; }
-                    .drawflow-node { border-radius: 8px !important; background: #4e4e4e !important; color: white !important; border: 1px solid #666 !important; width: 250px !important; }
-                    .drawflow-node .title-box { background: #3d3d3d !important; height: 40px !important; line-height: 40px !important; }
-                    .drawflow .drawflow-node .inputs, .drawflow .drawflow-node .outputs { margin-top: 15px !important;}
-                    .drawflow-node .input, .drawflow-node .output { height: 25px !important; width: 25px !important; }
-                    .main-content { padding: 10px; }
-                    .main-content select, .main-content input { color: #333; width: 100%; margin-top: 5px; box-sizing: border-box; }
-                    
-                    /* Estilos para el Menú Contextual */
+                    /* Estilos (sin cambios respecto a la versión anterior) */
+                    #drawflow { 
+                        width: 100%; 
+                        height: 85vh; 
+                        border: 1px solid #444; 
+                        background-color: #2d343c; 
+                        background-image: linear-gradient(rgba(255,255,255,.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.05) 1px, transparent 1px);
+                        background-size: 20px 20px;
+                    }
+                    .drawflow-node { 
+                        border-radius: 6px !important; 
+                        background: #4e4e4e !important; 
+                        color: white !important; 
+                        border: 1px solid #666 !important; 
+                        width: 200px !important;
+                        font-size: 12px;
+                    }
+                    .drawflow-node .title-box { 
+                        background: #3d3d3d !important; 
+                        height: 30px !important;
+                        line-height: 30px !important; 
+                        font-size: 13px;
+                    }
+                    .drawflow .drawflow-node .inputs, .drawflow .drawflow-node .outputs { 
+                        margin-top: 10px !important;
+                    }
+                    .drawflow-node .input, .drawflow-node .output { 
+                        height: 20px !important; 
+                        width: 20px !important; 
+                    }
+                    .main-content { 
+                        padding: 8px;
+                    }
+                    .main-content label {
+                        margin-bottom: 2px;
+                        font-weight: 500;
+                    }
+                    .main-content select, .main-content input { 
+                        color: #333; 
+                        width: 100%; 
+                        margin-top: 3px; 
+                        box-sizing: border-box;
+                        padding: 4px;
+                        font-size: 12px;
+                        border-radius: 4px;
+                        border: 1px solid #ccc;
+                    }
                     #context-menu {
                         display: none; position: absolute; background-color: #f1f1f1;
                         min-width: 220px; box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
@@ -35,7 +83,6 @@
                 </style>
 
                 <div id="context-menu"></div>
-
                 <div id="drawflow"></div>
             </div>
         </div>
@@ -49,8 +96,10 @@
 
 <script src="https://cdn.jsdelivr.net/gh/jerosoler/Drawflow/dist/drawflow.min.js"></script>
 
+<!-- Script de configuración con las nuevas URLs de la API -->
 <script id="editor-config"
         data-api-rules-url="{% url 'rulesengine-api:rule-list' %}"
+        data-api-stations-url="{% url 'rulesengine-api:api-station-list' %}"
         data-api-sensors-url="{% url 'rulesengine-api:api-sensor-list' %}"
         data-api-policies-url="{% url 'rulesengine-api:api-alertpolicy-list' %}"
         data-csrf-token="{{ csrf_token }}">
@@ -58,3 +107,4 @@
 
 <script src="{% static 'js/rule_editor.js' %}"></script>
 {% endblock %}
+

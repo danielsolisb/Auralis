@@ -183,3 +183,15 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 MQTT_BROKER_IP = '34.30.17.212'
 MQTT_BROKER_PORT = 8081
+
+
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        # Esto le dice a la API que revise si hay una sesión de usuario de Django activa
+        'rest_framework.authentication.SessionAuthentication',
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        # Esto hace que todas las vistas de la API requieran autenticación por defecto
+        'rest_framework.permissions.IsAuthenticated',
+    ]
+}

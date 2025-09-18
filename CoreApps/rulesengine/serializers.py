@@ -3,62 +3,53 @@ from rest_framework import serializers
 from .models import Rule, Condition, RuleNode
 from CoreApps.sensorhub.models import Sensor, AlertPolicy
 
-# Serializer para listar Sensores (solo lectura)
+# Serializers de solo lectura
 class SensorSerializer(serializers.ModelSerializer):
     class Meta:
         model = Sensor
-        fields = ['id', 'name', 'station'] # Lo que el frontend necesita para mostrar
+        fields = ['id', 'name']
 
-# Serializer para listar Políticas de Alerta (solo lectura)
 class AlertPolicySerializer(serializers.ModelSerializer):
+    label = serializers.CharField(source='__str__', read_only=True)
     class Meta:
         model = AlertPolicy
-        fields = ['id', 'scope', '__str__'] # Usamos __str__ para un nombre descriptivo
+        fields = ['id', 'label']
 
-# Serializers para las Reglas (lectura y escritura)
 class ConditionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Condition
         fields = '__all__'
 
-
+# --- CORRECCIÓN CLAVE ---
+# Este serializer ahora se encargará de la recursión para mostrar el árbol
 class RuleNodeSerializer(serializers.ModelSerializer):
-    # Al leer, usamos un serializador anidado para mostrar los datos de la condición
-    condition = ConditionSerializer(read_only=True) 
-    # Usamos recursión para los hijos
+    condition = ConditionSerializer(read_only=True)
+    # DRF puede manejar la recursión si lo definimos así:
     children = serializers.SerializerMethodField()
 
     class Meta:
         model = RuleNode
-        # Al escribir, solo necesitamos el ID de la condición
-        fields = ['id', 'node_type', 'condition', 'logical_operator', 'children']
-
+        fields = ['id', 'node_type', 'logical_operator', 'condition', 'children']
+    
     def get_children(self, obj):
-        # Evita la recursión infinita
-        if 'no_children' in self.context:
-            return []
-        # Serializa los hijos del nodo
-        return RuleNodeSerializer(obj.children.all(), many=True, context=self.context).data
+        # Para cada hijo, usamos este mismo serializer.
+        return RuleNodeSerializer(obj.children.all(), many=True).data
 
-
-
-class RuleSerializer(serializers.ModelSerializer):
-    # Anidamos el nodo raíz del árbol de reglas
-    nodes = RuleNodeSerializer(many=True, read_only=True)
-
+# Serializer para la VISTA DE LISTA (simple)
+class RuleListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Rule
-        fields = ['id', 'name', 'description', 'company', 'severity', 'is_active', 'nodes']
+        fields = ['id', 'name']
 
+# Serializer para la VISTA DE DETALLE (completo, con el árbol de nodos)
 class RuleDetailSerializer(serializers.ModelSerializer):
-    # Usamos un SerializerMethodField para obtener solo los nodos raíz (sin padre)
     nodes = serializers.SerializerMethodField()
 
     class Meta:
         model = Rule
-        fields = ['id', 'name', 'description', 'company', 'severity', 'is_active', 'nodes']
+        fields = ['id', 'name', 'description', 'severity', 'is_active', 'nodes']
 
-    def get_nodes(self, obj):
-        # Filtramos por nodos que no tienen padre para empezar el árbol
-        root_nodes = obj.nodes.filter(parent__isnull=True)
+    def get_nodes(self, instance):
+        # Buscamos los nodos que no tienen padre (la raíz del árbol)
+        root_nodes = instance.nodes.filter(parent__isnull=True)
         return RuleNodeSerializer(root_nodes, many=True).data

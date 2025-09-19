@@ -147,6 +147,7 @@ $(document).ready(function() {
         editor.clear();
         currentRuleId = null;
         $('#rules-dropdown').val('');
+        $('#btn-delete-rule').prop('disabled', true);  //delete
         const sensorData = availableNodes.sensor;
         editor.addNode('sensor', sensorData.inputs, sensorData.outputs, 100, 200, 'sensor', {}, sensorData.content);
         const outputData = availableNodes.rule_output;
@@ -172,6 +173,7 @@ $(document).ready(function() {
                 return;
             }
             
+            $('#btn-delete-rule').prop('disabled', false);  //delete
             const outputTemplate = availableNodes.rule_output;
             const outputDfId = editor.addNode('rule_output', outputTemplate.inputs, outputTemplate.outputs, 1500, 400, 'rule_output', {}, outputTemplate.content);
 
@@ -195,10 +197,13 @@ $(document).ready(function() {
                 }
 
                 console.log("Grafo de la regla cargado y dibujado correctamente.");
+                
             }, 500);
 
         } catch (error) {
             console.error("Error al cargar el grafo de la regla:", error);
+            $('#btn-delete-rule').prop('disabled', true);
+            currentRuleId = null; // Reseteamos el ID de la regla actual
             alert("No se pudo cargar la regla seleccionada.");
         }
     }
@@ -449,10 +454,64 @@ async function saveRuleGraph() {
     }
 }
 
+/**
+ * Funcion para borrado
+ */
+/**
+ * Gestiona la eliminación de la regla actual.
+ */
+async function deleteRule() {
+    if (!currentRuleId) {
+        alert("No hay una regla cargada para eliminar.");
+        return;
+    }
+
+    // Mensaje de confirmación
+    const ruleNameToDelete = $('#rules-dropdown option:selected').text();
+    if (!confirm(`¿Está seguro de que desea eliminar la regla "${ruleNameToDelete}"? Esta acción no se puede deshacer.`)) {
+        return;
+    }
+
+    console.log(`Iniciando eliminación de la regla ID: ${currentRuleId}`);
+
+    try {
+        const response = await fetch(`${API_RULES_URL}${currentRuleId}/`, {
+            method: 'DELETE',
+            headers: {
+                'X-CSRFToken': CSRF_TOKEN
+            }
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(JSON.stringify(errorData));
+        }
+
+        $.niftyNoty({
+            type: 'success',
+            icon : 'fa fa-check',
+            message : `Regla "${ruleNameToDelete}" eliminada con éxito.`,
+            container : 'floating',
+            timer : 5000
+        });
+
+        // Limpiar y actualizar la UI
+        editor.clear();
+        currentRuleId = null;
+        $('#rules-dropdown').val('');
+        $('#btn-delete-rule').prop('disabled', true);
+        await populateRulesDropdown();
+
+    } catch (error) {
+        console.error("Error al eliminar la regla:", error);
+        alert("Ocurrió un error al eliminar la regla. Revise la consola para más detalles.");
+    }
+}
 
     // --- 6. EVENTOS DE UI Y ARRANQUE ---
     $('#btn-new-rule').on('click', createNewRuleTemplate);
     $('#btn-save-rule').on('click', saveRuleGraph); // ¡Funcionalidad activada!
+    $('#btn-delete-rule').on('click', deleteRule); //delete
     $('#zoom-in-btn').on('click', () => editor.zoom_in());
     $('#zoom-out-btn').on('click', () => editor.zoom_out());
     $('#zoom-reset-btn').on('click', () => editor.zoom_reset());

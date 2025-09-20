@@ -31,7 +31,21 @@ DEBUG = True
 
 ALLOWED_HOSTS = ["*", "gasmart.ecuapulselab.com"]
 
+# ==============================================================================
+# CONFIGURACIÓN DE SEGURIDAD PARA PRODUCCIÓN (HTTPS/CSRF)
+# ==============================================================================
 
+# Asegura que la cookie CSRF solo se envíe a través de HTTPS.
+CSRF_COOKIE_SECURE = True
+
+# Asegura que la cookie de sesión solo se envíe a través de HTTPS.
+SESSION_COOKIE_SECURE = True
+
+# Indícale a Django que confíe en las peticiones que se originan desde tu dominio.
+# Esta línea es fundamental para que funcionen las peticiones POST, PUT, DELETE.
+CSRF_TRUSTED_ORIGINS = ['https://gasmart.ecuapulselab.com']
+
+# ==============================================================================
 # Application definition
 
 INSTALLED_APPS = [

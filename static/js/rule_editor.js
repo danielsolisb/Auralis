@@ -5,7 +5,13 @@ $(document).ready(function() {
 
     // --- 1. CONFIGURACIÓN E INICIALIZACIÓN ---
     const configElement = document.getElementById('editor-config');
-    const API_RULES_URL = configElement.dataset.apiRulesUrl;
+    //const API_RULES_URL = configElement.dataset.apiRulesUrl;
+    // Aseguramos que la URL base de la API de reglas siempre termine con una barra inclinada
+    let baseUrl = configElement.dataset.apiRulesUrl;
+    if (!baseUrl.endsWith('/')) {
+        baseUrl += '/';
+    }
+    const API_RULES_URL = baseUrl;
     const API_STATIONS_URL = configElement.dataset.apiStationsUrl;
     const API_SENSORS_URL = configElement.dataset.apiSensorsUrl;
     const API_POLICIES_URL = configElement.dataset.apiPoliciesUrl;

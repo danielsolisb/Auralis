@@ -189,10 +189,12 @@ $(document).ready(function() {
                 if (outputElement) {
                     outputElement.querySelector('[df-name]').value = ruleData.name;
                     outputElement.querySelector('[df-severity]').value = ruleData.severity;
+                    editor.updateNodeDataFromId(outputDfId, { name: ruleData.name, severity: ruleData.severity }); //agregado
                 }
                 
                 if (finalNodeId) {
-                    editor.centerNode(finalNodeId);
+                    //editor.centerNode(finalNodeId);
+                    editor.center();
                     editor.zoom_out();
                 }
 
@@ -209,84 +211,100 @@ $(document).ready(function() {
     }
     
     async function drawNodeAndChildren(backendNode, x, y) {
-        const HORIZONTAL_SPACING = 350;
-        const VERTICAL_SPACING = 150;
+    const HORIZONTAL_SPACING = 350;
+    const VERTICAL_SPACING = 150;
 
-        if (backendNode.node_type === 'OP') {
-            const opTemplate = availableNodes.logical_op;
-            const opDfId = editor.addNode('logical_op', opTemplate.inputs, opTemplate.outputs, x, y, 'logical_op', {}, opTemplate.content);
+    if (backendNode.node_type === 'OP') {
+        const opTemplate = availableNodes.logical_op;
+        const opDfId = editor.addNode('logical_op', opTemplate.inputs, opTemplate.outputs, x, y, 'logical_op', {}, opTemplate.content);
 
-            setTimeout(() => {
-                const opElement = document.querySelector(`#node-${opDfId}`);
-                if (opElement) opElement.querySelector('[df-logical_operator]').value = backendNode.logical_operator;
-            }, 200);
-
-            let totalHeight = 0;
-            let y_offset = y;
-
-            if (backendNode.children && backendNode.children.length > 0) {
-                const child1Result = await drawNodeAndChildren(backendNode.children[0], x - HORIZONTAL_SPACING, y_offset);
-                editor.addConnection(child1Result.nodeId, opDfId, 'output_1', 'input_1');
-                
-                y_offset += child1Result.totalHeight / 2 + VERTICAL_SPACING / 2;
-                
-                const child2Result = await drawNodeAndChildren(backendNode.children[1], x - HORIZONTAL_SPACING, y_offset);
-                editor.addConnection(child2Result.nodeId, opDfId, 'output_1', 'input_2');
-                
-                totalHeight = y_offset + child2Result.totalHeight / 2 - y;
-
-                const centerY = (child1Result.y + child2Result.y) / 2;
-                const node = editor.getNodeFromId(opDfId);
-                node.pos_y = centerY;
-                editor.updateNodeDataFromId(opDfId, { pos_y: centerY });
+        setTimeout(() => {
+            const opElement = document.querySelector(`#node-${opDfId}`);
+            if (opElement) {
+                opElement.querySelector('[df-logical_operator]').value = backendNode.logical_operator;
+                // --- CORRECCIÓN AÑADIDA ---
+                editor.updateNodeDataFromId(opDfId, { logical_operator: backendNode.logical_operator });
             }
-            const finalNode = editor.getNodeFromId(opDfId);
-            return { nodeId: opDfId, totalHeight: Math.max(totalHeight, VERTICAL_SPACING), y: finalNode.pos_y };
-        }
-        
-        if (backendNode.node_type === 'COND' && backendNode.condition) {
-            const condition = backendNode.condition;
+        }, 200);
 
-            const opTemplate = availableNodes.operator;
-            const opDfId = editor.addNode('operator', opTemplate.inputs, opTemplate.outputs, x, y, 'operator', {}, opTemplate.content);
+        let totalHeight = 0;
+        let y_offset = y;
+
+        if (backendNode.children && backendNode.children.length > 0) {
+            const child1Result = await drawNodeAndChildren(backendNode.children[0], x - HORIZONTAL_SPACING, y_offset);
+            editor.addConnection(child1Result.nodeId, opDfId, 'output_1', 'input_1');
             
-            const sensorTemplate = availableNodes.sensor;
-            const sensorDfId = editor.addNode('sensor', sensorTemplate.inputs, sensorTemplate.outputs, x - HORIZONTAL_SPACING, y - 75, 'sensor', {}, sensorTemplate.content);
-            editor.addConnection(sensorDfId, opDfId, 'output_1', 'input_1');
+            y_offset += child1Result.totalHeight / 2 + VERTICAL_SPACING / 2;
+            
+            const child2Result = await drawNodeAndChildren(backendNode.children[1], x - HORIZONTAL_SPACING, y_offset);
+            editor.addConnection(child2Result.nodeId, opDfId, 'output_1', 'input_2');
+            
+            totalHeight = y_offset + child2Result.totalHeight / 2 - y;
 
-            let thresholdDfId;
-            if (condition.threshold_type === 'STATIC') {
-                const staticValTemplate = availableNodes.static_value;
-                thresholdDfId = editor.addNode('static_value', staticValTemplate.inputs, staticValTemplate.outputs, x - HORIZONTAL_SPACING, y + 75, 'static_value', {}, staticValTemplate.content);
-            } else {
-                const policyTemplate = availableNodes.policy;
-                thresholdDfId = editor.addNode('policy', policyTemplate.inputs, policyTemplate.outputs, x - HORIZONTAL_SPACING, y + 75, 'policy', {}, policyTemplate.content);
-            }
-            editor.addConnection(thresholdDfId, opDfId, 'output_1', 'input_2');
-
-            setTimeout(async () => {
-                const sensorElement = document.querySelector(`#node-${sensorDfId}`);
-                if (sensorElement) await populateSelect(sensorElement.querySelector('[df-source_sensor]'), condition.source_sensor);
-
-                const opElement = document.querySelector(`#node-${opDfId}`);
-                if (opElement) opElement.querySelector('[df-operator]').value = condition.operator;
-                
-                const thresholdElement = document.querySelector(`#node-${thresholdDfId}`);
-                if (thresholdElement) {
-                    if(condition.threshold_type === 'STATIC') {
-                         thresholdElement.querySelector('[df-static_value]').value = condition.threshold_config.value;
-                    } else {
-                         await populateSelect(thresholdElement.querySelector('[df-linked_policy]'), condition.linked_policy);
-                    }
-                }
-            }, 300);
-
-            return { nodeId: opDfId, totalHeight: VERTICAL_SPACING, y: y };
+            const centerY = (child1Result.y + child2Result.y) / 2;
+            const node = editor.getNodeFromId(opDfId);
+            node.pos_y = centerY;
+            editor.updateNodeDataFromId(opDfId, { pos_y: centerY });
         }
-        
-        return { nodeId: null, totalHeight: 0, y: y };
+        const finalNode = editor.getNodeFromId(opDfId);
+        return { nodeId: opDfId, totalHeight: Math.max(totalHeight, VERTICAL_SPACING), y: finalNode.pos_y };
     }
+    
+    if (backendNode.node_type === 'COND' && backendNode.condition) {
+        const condition = backendNode.condition;
 
+        const opTemplate = availableNodes.operator;
+        const opDfId = editor.addNode('operator', opTemplate.inputs, opTemplate.outputs, x, y, 'operator', {}, opTemplate.content);
+        
+        const sensorTemplate = availableNodes.sensor;
+        const sensorDfId = editor.addNode('sensor', sensorTemplate.inputs, sensorTemplate.outputs, x - HORIZONTAL_SPACING, y - 75, 'sensor', {}, sensorTemplate.content);
+        editor.addConnection(sensorDfId, opDfId, 'output_1', 'input_1');
+
+        let thresholdDfId;
+        if (condition.threshold_type === 'STATIC') {
+            const staticValTemplate = availableNodes.static_value;
+            thresholdDfId = editor.addNode('static_value', staticValTemplate.inputs, staticValTemplate.outputs, x - HORIZONTAL_SPACING, y + 75, 'static_value', {}, staticValTemplate.content);
+        } else {
+            const policyTemplate = availableNodes.policy;
+            thresholdDfId = editor.addNode('policy', policyTemplate.inputs, policyTemplate.outputs, x - HORIZONTAL_SPACING, y + 75, 'policy', {}, policyTemplate.content);
+        }
+        editor.addConnection(thresholdDfId, opDfId, 'output_1', 'input_2');
+
+        setTimeout(async () => {
+            // --- BLOQUE DE CORRECCIÓN PRINCIPAL ---
+            const sensorElement = document.querySelector(`#node-${sensorDfId}`);
+            if (sensorElement) {
+                await populateSelect(sensorElement.querySelector('[df-source_sensor]'), condition.source_sensor);
+                // Forzamos la actualización de datos internos de Drawflow para el sensor
+                editor.updateNodeDataFromId(sensorDfId, { source_sensor: condition.source_sensor });
+            }
+
+            const opElement = document.querySelector(`#node-${opDfId}`);
+            if (opElement) {
+                opElement.querySelector('[df-operator]').value = condition.operator;
+                // Forzamos la actualización para el operador
+                editor.updateNodeDataFromId(opDfId, { operator: condition.operator });
+            }
+            
+            const thresholdElement = document.querySelector(`#node-${thresholdDfId}`);
+            if (thresholdElement) {
+                if(condition.threshold_type === 'STATIC') {
+                     thresholdElement.querySelector('[df-static_value]').value = condition.threshold_config.value;
+                     // Forzamos la actualización para el valor estático
+                     editor.updateNodeDataFromId(thresholdDfId, { static_value: condition.threshold_config.value });
+                } else {
+                     await populateSelect(thresholdElement.querySelector('[df-linked_policy]'), condition.linked_policy);
+                     // Forzamos la actualización para la política
+                     editor.updateNodeDataFromId(thresholdDfId, { linked_policy: condition.linked_policy });
+                }
+            }
+        }, 300);
+
+        return { nodeId: opDfId, totalHeight: VERTICAL_SPACING, y: y };
+    }
+    
+    return { nodeId: null, totalHeight: 0, y: y };
+}
 
     // --- 5. NUEVA LÓGICA DE GUARDADO ---
     
@@ -402,6 +420,7 @@ async function saveRuleGraph() {
     // Construir el payload final para la API
     const payload = {
         name: outputNodeData.name,
+        description: '', //agregado
         // --- ¡ESTA ES LA LÍNEA QUE FALTABA! ---
         // Añadimos la severidad desde los datos del nodo de salida.
         severity: outputNodeData.severity,

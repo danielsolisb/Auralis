@@ -2,6 +2,7 @@
 from rest_framework import serializers
 from .models import Rule, Condition, RuleNode
 from CoreApps.sensorhub.models import Sensor, AlertPolicy, Station
+from django.db import transaction
 
 class StationSerializer(serializers.ModelSerializer):
     class Meta:
@@ -60,9 +61,8 @@ class RuleDetailSerializer(serializers.ModelSerializer):
     """
     # Para LEER (mostrar el grafo)
     nodes = serializers.SerializerMethodField(read_only=True)
-    
+
     # Para ESCRIBIR (guardar el grafo)
-    # Acepta una lista de diccionarios que representa la estructura del árbol.
     nodes_data = serializers.ListField(child=serializers.DictField(), write_only=True)
 
     class Meta:
@@ -77,6 +77,66 @@ class RuleDetailSerializer(serializers.ModelSerializer):
         root_nodes = instance.nodes.filter(parent__isnull=True)
         return RuleNodeReadSerializer(root_nodes, many=True).data
 
+    def _save_nodes_recursively(self, rule, parent_node, nodes_data, condition_counter=None):
+        """
+        Función auxiliar que recorre la estructura de nodos y los crea en la BD.
+        """
+        if condition_counter is None:
+            condition_counter = [1]
+
+        for node_data in nodes_data:
+            condition_instance = None
+            if node_data.get('condition'):
+                condition_data = node_data['condition']
+
+                new_condition_name = f"Cond_{condition_counter[0]}_{rule.name[:20]}"
+                condition_data['name'] = new_condition_name
+                condition_counter[0] += 1
+
+                sensor_id = condition_data.pop('source_sensor')
+                try:
+                    sensor_instance = Sensor.objects.get(pk=sensor_id)
+                except Sensor.DoesNotExist:
+                    raise serializers.ValidationError(f"El sensor con ID {sensor_id} no fue encontrado.")
+
+                condition_instance = Condition.objects.create(
+                    source_sensor=sensor_instance, 
+                    **condition_data
+                )
+
+            current_node = RuleNode.objects.create(
+                rule=rule,
+                parent=parent_node,
+                node_type=node_data['node_type'],
+                logical_operator=node_data.get('logical_operator'),
+                condition=condition_instance
+            )
+
+            if 'children' in node_data and node_data['children']:
+                self._save_nodes_recursively(rule, current_node, node_data['children'], condition_counter)
+
+    def create(self, validated_data):
+        # Obtenemos la compañía desde el contexto que pasará la vista.
+        company = self.context['request'].user.company
+        if not company:
+            raise serializers.ValidationError("El usuario no tiene una compañía asignada.")
+
+        # Extraemos los datos de los nodos antes de crear la regla.
+        nodes_data = validated_data.pop('nodes_data', [])
+
+        try:
+            with transaction.atomic():
+                # Creamos la regla principal con los datos restantes.
+                rule_instance = Rule.objects.create(company=company, **validated_data)
+
+                # Si hay nodos, los creamos recursivamente.
+                if nodes_data:
+                    self._save_nodes_recursively(rule_instance, None, nodes_data)
+
+            return rule_instance
+        except Exception as e:
+            raise serializers.ValidationError(str(e))
+            
 #escritura
 class ConditionWriteSerializer(serializers.ModelSerializer):
     class Meta:

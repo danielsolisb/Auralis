@@ -33,6 +33,8 @@ urlpatterns = [
     path('rules/', include('CoreApps.rulesengine.urls', namespace='rulesengine')),
 
     path('api/v1/', include('CoreApps.rulesengine.api_urls', namespace='rulesengine-api')),
+    # --- NUEVA URL PARA LA API DE INTELIGENCIA ---
+    path('api/v1/intelligence/', include('CoreApps.intelligence_engine.api_urls', namespace='intelligence_api')),
 ]
 
 if settings.DEBUG:

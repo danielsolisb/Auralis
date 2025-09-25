@@ -63,6 +63,7 @@ INSTALLED_APPS = [
     'CoreApps.events',
     'CoreApps.rulesengine', #Base para nuevas reglas de alertas inteligentes
     'rest_framework', 
+    'CoreApps.intelligence_engine',
 ]
 
 # Configuración del modelo de usuario personalizado
@@ -209,3 +210,7 @@ REST_FRAMEWORK = {
         'rest_framework.permissions.IsAuthenticated',
     ]
 }
+
+# --- CLAVE SECRETA PARA EL SERVICIO DE PREDICCIÓN ---
+# Cambia esto por una cadena de texto larga, aleatoria y secreta
+PREDICTION_SERVICE_API_KEY = "tu-clave-super-secreta-y-larga-aqui"

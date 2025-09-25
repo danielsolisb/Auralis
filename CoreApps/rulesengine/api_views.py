@@ -72,32 +72,18 @@ class AlertPolicyListView(generics.ListAPIView):
 
 
 class RuleViewSet(viewsets.ModelViewSet):
-    # --- CORRECCIÓN CLAVE: Forzamos el método de autenticación ---
-    # Con esto, le decimos a esta vista que SIEMPRE intente usar la sesión
-    # de Django para autenticar al usuario. Esto anula cualquier conflicto.
     authentication_classes = [SessionAuthentication]
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         """
-        Esta lógica ahora funcionará, ya que 'request.user' será el usuario correcto.
+        Filtra las reglas para que solo muestre las de la compañía del usuario.
         """
         user = self.request.user
-        
-        # --- LOGS PARA DEPURACIÓN (Ahora son seguros) ---
-        print(f"\n--- [API] Comprobando permisos para el usuario: {user.email} ---")
         if hasattr(user, 'company') and user.company:
-            print(f"[API] ID de la compañía del usuario: {user.company.id}")
-            print(f"[API] ¿Es dueño de la plataforma?: {user.company.is_platform_owner}")
-
             if user.company.is_platform_owner:
-                print("[API] Acceso como Dueño de Plataforma: Devolviendo TODAS las reglas.")
                 return Rule.objects.all()
-            
-            print(f"[API] Acceso de usuario normal: Filtrando reglas por company_id = {user.company.id}")
             return Rule.objects.filter(company=user.company)
-        
-        print("[API] El usuario no tiene compañía asignada. Devolviendo conjunto vacío.")
         return Rule.objects.none()
 
     def get_serializer_class(self):
@@ -108,69 +94,50 @@ class RuleViewSet(viewsets.ModelViewSet):
             return RuleListSerializer
         return RuleDetailSerializer
 
-    def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        
-        # Obtenemos la compañía del usuario que está creando la regla
-        company = request.user.company
-        if not company:
-            return Response({"error": "El usuario no tiene una compañía asignada."}, status=status.HTTP_400_BAD_REQUEST)
+    def get_serializer_context(self):
+        """
+        Pasa el objeto 'request' al serializador.
+        Esto es necesario para que en el serializer podamos acceder a request.user.
+        """
+        return {'request': self.request}
 
-        try:
-            # Usamos una transacción para asegurar que todo se guarde correctamente o nada.
-            with transaction.atomic():
-                # Creamos la regla principal, asignando la compañía del usuario.
-                rule_instance = Rule.objects.create(
-                    company=company,
-                    name=serializer.validated_data['name'],
-                    description=serializer.validated_data.get('description', ''),
-                    severity=serializer.validated_data['severity'],
-                    is_active=serializer.validated_data.get('is_active', True)
-                )
-                
-                # Procesamos la estructura de nodos anidada.
-                nodes_data = serializer.validated_data.get('nodes_data', [])
-                if nodes_data:
-                    self._save_nodes_recursively(rule_instance, None, nodes_data)
+    def perform_create(self, serializer):
+        """
+        Al crear una regla, DRF llama a este método.
+        Nosotros no necesitamos hacer nada extra aquí porque toda la lógica
+        está ahora en el método .create() del serializador.
+        """
+        serializer.save()
 
-            # Devolvemos la regla recién creada y serializada para lectura.
-            read_serializer = RuleDetailSerializer(rule_instance)
-            headers = self.get_success_headers(read_serializer.data)
-            return Response(read_serializer.data, status=status.HTTP_201_CREATED, headers=headers)
-        
-        except Exception as e:
-            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
-    # --- NUEVA LÓGICA DE ACTUALIZACIÓN ---
     def update(self, request, *args, **kwargs):
+        """
+        La lógica de actualización se queda como estaba, ya que funcionaba correctamente.
+        """
         instance = self.get_object()
         serializer = self.get_serializer(instance, data=request.data)
         serializer.is_valid(raise_exception=True)
 
         try:
             with transaction.atomic():
-                # Actualizamos los campos de la regla principal
-                instance.name = serializer.validated_data['name']
-                instance.description = serializer.validated_data.get('description', instance.description)
-                instance.severity = serializer.validated_data['severity']
-                instance.is_active = serializer.validated_data.get('is_active', instance.is_active)
-                instance.save()
-
                 # Borramos los nodos antiguos para reconstruir el árbol
                 instance.nodes.all().delete()
-                
+
+                # Actualizamos los campos de la regla principal
+                # Usamos serializer.save() que maneja la actualización de los campos
+                instance = serializer.save()
+
                 # Guardamos la nueva estructura de nodos
                 nodes_data = serializer.validated_data.get('nodes_data', [])
                 if nodes_data:
-                    self._save_nodes_recursively(instance, None, nodes_data)
+                    # Para la actualización, llamamos a la función del serializador manualmente
+                    serializer._save_nodes_recursively(instance, None, nodes_data)
 
             read_serializer = RuleDetailSerializer(instance)
             return Response(read_serializer.data)
 
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
+            
     # --- NUEVA FUNCIÓN AUXILIAR RECURSIVA ---
     def _save_nodes_recursively(self, rule, parent_node, nodes_data, condition_counter=None):
         """

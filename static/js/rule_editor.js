@@ -163,58 +163,58 @@ $(document).ready(function() {
     // --- 4. LÓGICA DE CARGA DE GRAFOS (Sin cambios en su lógica interna) ---
     // ... [La función loadRuleGraph y drawNodeAndChildren permanecen exactamente igual que en la versión anterior]
     async function loadRuleGraph(ruleId) {
-        currentRuleId = ruleId;
-        editor.clear();
-        console.log(`Pidiendo datos para la regla ID: ${ruleId}`);
-        
-        try {
-            const response = await fetch(`${API_RULES_URL}${ruleId}/`);
-            if (!response.ok) throw new Error(`Error en la API: ${response.statusText}`);
-            const ruleData = await response.json();
-            console.log("Datos de la regla recibidos:", ruleData);
-            
-            if (!ruleData.nodes || ruleData.nodes.length === 0) {
-                console.warn("La regla no tiene nodos para dibujar.");
-                createNewRuleTemplate();
-                return;
-            }
-            
-            $('#btn-delete-rule').prop('disabled', false);  //delete
-            const outputTemplate = availableNodes.rule_output;
-            const outputDfId = editor.addNode('rule_output', outputTemplate.inputs, outputTemplate.outputs, 1500, 400, 'rule_output', {}, outputTemplate.content);
+    currentRuleId = ruleId;
+    editor.clear();
+    $('#btn-delete-rule').prop('disabled', false);
+    console.log(`Pidiendo datos para la regla ID: ${ruleId}`);
 
-            const rootNode = ruleData.nodes[0];
-            const { nodeId: finalNodeId } = await drawNodeAndChildren(rootNode, 1100, 400);
+    try {
+        const response = await fetch(`${API_RULES_URL}${ruleId}/`);
+        if (!response.ok) throw new Error(`Error en la API: ${response.statusText}`);
+        const ruleData = await response.json();
+        console.log("Datos de la regla recibidos:", ruleData);
 
-            if(finalNodeId) {
-                editor.addConnection(finalNodeId, outputDfId, 'output_1', 'input_1');
-            }
-            
-            setTimeout(() => {
-                const outputElement = document.querySelector(`#node-${outputDfId}`);
-                if (outputElement) {
-                    outputElement.querySelector('[df-name]').value = ruleData.name;
-                    outputElement.querySelector('[df-severity]').value = ruleData.severity;
-                    editor.updateNodeDataFromId(outputDfId, { name: ruleData.name, severity: ruleData.severity }); //agregado
-                }
-                
-                if (finalNodeId) {
-                    //editor.centerNode(finalNodeId);
-                    editor.center();
-                    editor.zoom_out();
-                }
-
-                console.log("Grafo de la regla cargado y dibujado correctamente.");
-                
-            }, 500);
-
-        } catch (error) {
-            console.error("Error al cargar el grafo de la regla:", error);
-            $('#btn-delete-rule').prop('disabled', true);
-            currentRuleId = null; // Reseteamos el ID de la regla actual
-            alert("No se pudo cargar la regla seleccionada.");
+        if (!ruleData.nodes || ruleData.nodes.length === 0) {
+            console.warn("La regla no tiene nodos para dibujar.");
+            createNewRuleTemplate();
+            return;
         }
+
+        const outputTemplate = availableNodes.rule_output;
+        const outputDfId = editor.addNode('rule_output', outputTemplate.inputs, outputTemplate.outputs, 1500, 400, 'rule_output', {}, outputTemplate.content);
+
+        const rootNode = ruleData.nodes[0];
+        const { nodeId: finalNodeId } = await drawNodeAndChildren(rootNode, 1100, 400);
+
+        if(finalNodeId) {
+            editor.addConnection(finalNodeId, outputDfId, 'output_1', 'input_1');
+        }
+
+        setTimeout(() => {
+            const outputElement = document.querySelector(`#node-${outputDfId}`);
+            if (outputElement) {
+                outputElement.querySelector('[df-name]').value = ruleData.name;
+                outputElement.querySelector('[df-severity]').value = ruleData.severity;
+                editor.updateNodeDataFromId(outputDfId, { name: ruleData.name, severity: ruleData.severity });
+            }
+
+            if (finalNodeId) {
+                // --- CORRECCIÓN FINAL ---
+                editor.zoom_reset(); // Usamos la función que sabemos que es segura.
+                editor.zoom_out();
+            }
+
+            console.log("Grafo de la regla cargado y dibujado correctamente.");
+
+        }, 500);
+
+    } catch (error) {
+        console.error("Error al cargar el grafo de la regla:", error);
+        $('#btn-delete-rule').prop('disabled', true);
+        currentRuleId = null; 
+        alert("No se pudo cargar la regla seleccionada.");
     }
+}
     
     async function drawNodeAndChildren(backendNode, x, y) {
     const HORIZONTAL_SPACING = 350;
@@ -320,71 +320,69 @@ $(document).ready(function() {
      * @param {object} allNodes - El objeto completo con todos los nodos del grafo de Drawflow.
      * @returns {object|null} - El nodo raíz de la regla en formato API, o null si hay error.
      */
-    function transformDrawflowToAPI(startNodeId, allNodes) {
-        const startNode = allNodes[startNodeId];
-        if (!startNode || !startNode.inputs.input_1.connections.length > 0) {
-            console.error("No hay nada conectado al nodo de salida de la regla.");
-            return null; // No hay nada conectado a la salida.
-        }
-
-        const firstConnection = startNode.inputs.input_1.connections[0];
-        const rootNodeId = firstConnection.node;
-        
-        // Función recursiva interna para construir el árbol
-        function buildTree(nodeId) {
-            const dfNode = allNodes[nodeId];
-            const apiNode = {};
-
-            if (dfNode.name === 'logical_op') {
-                apiNode.node_type = 'OP';
-                apiNode.logical_operator = dfNode.data.logical_operator;
-                apiNode.children = [];
-
-                const input1 = dfNode.inputs.input_1.connections[0];
-                const input2 = dfNode.inputs.input_2.connections[0];
-
-                if (input1) apiNode.children.push(buildTree(input1.node));
-                if (input2) apiNode.children.push(buildTree(input2.node));
-            
-            } else if (dfNode.name === 'operator') {
-                apiNode.node_type = 'COND';
-                
-                const condition = {
-                    name: "Condición generada automáticamente", // Podríamos mejorarlo
-                    metric_to_evaluate: 'VALUE', // Por ahora es fijo, se puede extender
-                    operator: dfNode.data.operator,
-                };
-                
-                // Analizar las dos entradas del nodo operador
-                const source1NodeId = dfNode.inputs.input_1.connections[0].node;
-                const source2NodeId = dfNode.inputs.input_2.connections[0].node;
-                
-                const source1Node = allNodes[source1NodeId];
-                const source2Node = allNodes[source2NodeId];
-
-                // Asumimos que una entrada es el sensor y la otra el umbral
-                const sensorNode = source1Node.name === 'sensor' ? source1Node : source2Node;
-                const thresholdNode = source1Node.name !== 'sensor' ? source1Node : source2Node;
-
-                condition.source_sensor = sensorNode.data.source_sensor;
-                
-                if(thresholdNode.name === 'static_value') {
-                    condition.threshold_type = 'STATIC';
-                    condition.threshold_config = { value: thresholdNode.data.static_value };
-                    condition.linked_policy = null;
-                } else { // 'policy'
-                    condition.threshold_type = 'POLICY';
-                    condition.linked_policy = thresholdNode.data.linked_policy;
-                    condition.threshold_config = {};
-                }
-                apiNode.condition = condition;
-            }
-            return apiNode;
-        }
-
-        return buildTree(rootNodeId);
+   function transformDrawflowToAPI(startNodeId, allNodes) {
+    const startNode = allNodes[startNodeId];
+    if (!startNode || !startNode.inputs.input_1.connections.length > 0) {
+        console.error("No hay nada conectado al nodo de salida de la regla.");
+        return null;
     }
-    
+
+    const firstConnection = startNode.inputs.input_1.connections[0];
+    const rootNodeId = firstConnection.node;
+
+    function buildTree(nodeId) {
+        const dfNode = allNodes[nodeId];
+        const apiNode = {};
+
+        if (dfNode.name === 'logical_op') {
+            apiNode.node_type = 'OP';
+            // --- CORRECCIÓN FINAL ---
+            // Leemos el valor del operador lógico y lo añadimos al payload.
+            apiNode.logical_operator = dfNode.data.logical_operator;
+            apiNode.children = [];
+
+            const input1 = dfNode.inputs.input_1.connections[0];
+            const input2 = dfNode.inputs.input_2.connections[0];
+
+            if (input1) apiNode.children.push(buildTree(input1.node));
+            if (input2) apiNode.children.push(buildTree(input2.node));
+
+        } else if (dfNode.name === 'operator') {
+            apiNode.node_type = 'COND';
+
+            const condition = {
+                name: "Condición generada automáticamente",
+                metric_to_evaluate: 'VALUE',
+                operator: dfNode.data.operator,
+            };
+
+            const source1NodeId = dfNode.inputs.input_1.connections[0].node;
+            const source2NodeId = dfNode.inputs.input_2.connections[0].node;
+
+            const source1Node = allNodes[source1NodeId];
+            const source2Node = allNodes[source2NodeId];
+
+            const sensorNode = source1Node.name === 'sensor' ? source1Node : source2Node;
+            const thresholdNode = source1Node.name !== 'sensor' ? source1Node : source2Node;
+
+            condition.source_sensor = sensorNode.data.source_sensor;
+
+            if(thresholdNode.name === 'static_value') {
+                condition.threshold_type = 'STATIC';
+                condition.threshold_config = { value: thresholdNode.data.static_value };
+                condition.linked_policy = null;
+            } else {
+                condition.threshold_type = 'POLICY';
+                condition.linked_policy = thresholdNode.data.linked_policy;
+                condition.threshold_config = {};
+            }
+            apiNode.condition = condition;
+        }
+        return apiNode;
+    }
+
+    return buildTree(rootNodeId);
+}
     /**
  * Orquesta el proceso de validación, transformación y envío de la regla a la API.
  */
